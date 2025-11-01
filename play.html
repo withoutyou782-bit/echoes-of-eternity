@@ -743,88 +743,6 @@
                     npc.setScale(1);
                 });
 
-                npcBody.on('pointerdown', () => {
-                    this.showDialogue(dialogue, name);
-                });
-
-                this.npcs.push(npc);
-            }
-
-            showDialogue(text, speaker) {
-                // Удалить предыдущий диалог
-                if (this.dialogueBox) {
-                    this.dialogueBox.destroy();
-                    this.dialogueText.destroy();
-                    this.speakerText.destroy();
-                }
-
-                const width = this.cameras.main.width;
-                const height = this.cameras.main.height;
-
-                this.dialogueBox = this.add.graphics();
-                this.dialogueBox.fillStyle(0x000000, 0.95);
-                this.dialogueBox.fillRect(50, height - 180, width - 100, 120);
-                this.dialogueBox.lineStyle(3, 0x00ffff);
-                this.dialogueBox.strokeRect(50, height - 180, width - 100, 120);
-
-                this.speakerText = this.add.text(70, height - 170, speaker + ':', {
-                    fontFamily: 'Courier New',
-                    fontSize: '18px',
-                    color: '#00ffff',
-                    fontStyle: 'bold'
-                });
-
-                this.dialogueText = this.add.text(70, height - 140, text, {
-                    fontFamily: 'Courier New',
-                    fontSize: '16px',
-                    color: '#ffffff',
-                    wordWrap: { width: width - 140 }
-                });
-
-                // Клик для закрытия
-                this.dialogueBox.setInteractive(
-                    new Phaser.Geom.Rectangle(50, height - 180, width - 100, 120),
-                    Phaser.Geom.Rectangle.Contains
-                );
-
-                this.input.once('pointerdown', () => {
-                    if (this.dialogueBox) {
-                        this.dialogueBox.destroy();
-                        this.dialogueText.destroy();
-                        this.speakerText.destroy();
-                        this.dialogueBox = null;
-                    }
-                });
-
-                // Автоматически закрыть через 5 секунд
-                this.time.delayedCall(5000, () => {
-                    if (this.dialogueBox) {
-                        this.dialogueBox.destroy();
-                        this.dialogueText.destroy();
-                        this.speakerText.destroy();
-                        this.dialogueBox = null;
-                    }
-                });
-            }
-
-            update() {
-                if (!this.player) return;
-
-                let moved = false;
-
-                if (this.cursors.left.isDown) {
-                    this.player.x -= this.playerSpeed;
-                    moved = true;
-                } else if (this.cursors.right.isDown) {
-                    this.player.x += this.playerSpeed;
-                    moved = true;
-                }
-
-                // Ограничение границ
-                const width = this.cameras.main.width;
-                const height = this.cameras.main.height;
-                this.player.x = Phaser.Math.Clamp(this.player.x, 40, width - 40);
-            }
         }
 
         // UIScene - Интерфейс
@@ -917,7 +835,14 @@
             height: 720,
             parent: 'game-container',
             backgroundColor: '#1a1a2e',
-            scene: [MenuScene, WorldScene, UIScene],
+            scene: [MenuScene, WorldScene, BattleScene, UIScene],
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 0 },
+                    debug: false
+                }
+            },
             pixelArt: false,
             antialias: true,
             scale: {

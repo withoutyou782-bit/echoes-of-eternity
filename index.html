@@ -54,7 +54,10 @@
     <script>
         console.log('🎮 Игра запускается...');
         
-        window.gameState = { hp: 100, maxHp: 100, gold: 100, level: 1 };
+        window.gameState = { 
+            hp: 100, maxHp: 100, gold: 100, level: 1, exp: 0,
+            quests: [], activeQuests: [], inCastle: false, encounterTimer: 0
+        };
 
         class MenuScene extends Phaser.Scene {
             constructor() { super({ key: 'MenuScene' }); }
@@ -81,19 +84,221 @@
         class WorldScene extends Phaser.Scene {
             constructor() { super({ key: 'WorldScene' }); }
             create() {
-                const { width, height } = this.cameras.main;
-                this.add.rectangle(width/2, height/2, width, height, 0x2d4a3e);
-                this.add.text(width/2, 50, '🏰 Город Вечности', {
-                    fontSize: '32px', color: '#00ffff'
-                }).setOrigin(0.5);
+                // Большая карта
+                this.mapWidth = 3000;
+                this.mapHeight = 2000;
+                
+                // Фон - трава
+                this.add.rectangle(this.mapWidth/2, this.mapHeight/2, this.mapWidth, this.mapHeight, 0x2d4a3e);
 
-                this.player = this.physics.add.sprite(width/2, height/2, null);
+                // ЗАМОК
+                this.createCastle(400, 300);
+                
+                // Игрок
+                this.player = this.physics.add.sprite(500, 400, null);
+                this.player.setCollideWorldBounds(true);
                 this.playerG = this.add.graphics();
                 
-                this.createNPC(300, 300, '👤', 'Старейшина', 'Добро пожаловать!');
-                this.createNPC(500, 400, '⚔️', 'Воин', 'Хочешь сражаться?');
-                this.createNPC(700, 300, '🧙', 'Мудрец', 'Я вижу великую силу...');
+                // Камера следует за игроком
+                this.cameras.main.setBounds(0, 0, this.mapWidth, this.mapHeight);
+                this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
+                this.physics.world.setBounds(0, 0, this.mapWidth, this.mapHeight);
 
+                // NPC в замке
+                this.createNPC(450, 350, '👤', 'Старейшина', 'quest');
+                this.createNPC(550, 350, '⚔️', 'Воин', 'talk');
+                
+                // NPC вне замка
+                this.createNPC(1000, 800, '🧙', 'Мудрец', 'talk');
+                this.createNPC(1500, 1200, '👧', 'Девочка', 'talk');
+
+                // Управление
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.wasd = {
+                    up: this.input.keyboard.addKey('W'),
+                    down: this.input.keyboard.addKey('S'),
+                    left: this.input.keyboard.addKey('A'),
+                    right: this.input.keyboard.addKey('D')
+                };
+                this.zKey = this.input.keyboard.addKey('Z');
+
+                // Индикатор локации
+                this.locationText = this.add.text(10, 10, '', {
+                    fontSize: '18px', color: '#fff', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                }).setScrollFactor(0).setDepth(100);
+            }
+
+            createCastle(x, y) {
+                // Стены замка
+                const wall = this.add.rectangle(x + 100, y + 100, 300, 250, 0x8b4513);
+                wall.setStrokeStyle(4, 0x654321);
+                
+                // Крыша
+                const roof = this.add.triangle(x + 100, y, 0, 100, 150, 0, 300, 100, 0xff0000);
+                
+                // Вход
+                this.castleDoor = this.add.rectangle(x + 100, y + 200, 60, 80, 0x654321);
+                this.add.text(x + 100, y - 50, '🏰 ЗАМОК', {
+                    fontSize: '24px', color: '#ffd700'
+                }).setOrigin(0.5);
+                
+                // Зона входа/выхода
+                this.castleZone = this.add.zone(x + 100, y + 200, 80, 100);
+                this.physics.add.existing(this.castleZone);
+            }
+
+            createNPC(x, y, sprite, name, type) {
+                const npc = { x, y, name, type, sprite };
+                const c = this.add.circle(x, y, 20, 0xffaa00);
+                this.add.text(x, y, sprite, { fontSize: '32px' }).setOrigin(0.5);
+                this.add.text(x, y+35, name, {
+                    fontSize: '12px', color: '#fff', backgroundColor: '#000', padding: { x: 5, y: 2 }
+                }).setOrigin(0.5);
+                
+                if (!this.npcs) this.npcs = [];
+                this.npcs.push({ ...npc, circle: c });
+            }
+
+            checkNPCInteraction() {
+                if (!this.npcs) return;
+                this.npcs.forEach(npc => {
+                    const dist = Phaser.Math.Distance.Between(
+                        this.player.x, this.player.y, npc.x, npc.y
+                    );
+                    if (dist < 60 && Phaser.Input.Keyboard.JustDown(this.zKey)) {
+                        if (npc.type === 'quest') {
+                            this.startQuest(npc.name);
+                        } else {
+                            this.showMessage(`${npc.name}: Здравствуй, странник!`);
+                        }
+                    }
+                });
+            }
+
+            startQuest(npcName) {
+                if (window.gameState.activeQuests.length > 0) {
+                    this.showMessage('У вас уже есть активный квест!');
+                    return;
+                }
+                const quest = {
+                    id: 'kill_slimes',
+                    name: 'Убей 5 слизней',
+                    target: 'slime',
+                    count: 0,
+                    required: 5
+                };
+                window.gameState.activeQuests.push(quest);
+                this.showMessage('📜 Квест: Убей 5 слизней!');
+            }
+
+            checkCastleZone() {
+                const dist = Phaser.Math.Distance.Between(
+                    this.player.x, this.player.y,
+                    this.castleZone.x, this.castleZone.y
+                );
+                
+                if (dist < 50) {
+                    window.gameState.inCastle = true;
+                    this.locationText.setText('🏰 В замке');
+                } else {
+                    window.gameState.inCastle = false;
+                    this.locationText.setText('🌳 Вне замка');
+                }
+            }
+
+            checkRandomEncounter(delta) {
+                if (window.gameState.inCastle) return;
+                if (this.player.body.velocity.length() === 0) return;
+                
+                window.gameState.encounterTimer += delta;
+                if (window.gameState.encounterTimer > 3000) {
+                    window.gameState.encounterTimer = 0;
+                    if (Math.random() < 0.3) {
+                        this.startBattle();
+                    }
+                }
+            }
+
+            startBattle() {
+                const enemies = ['slime', 'wolf', 'bat'];
+                const enemy = Phaser.Utils.Array.GetRandom(enemies);
+                this.scene.pause();
+                this.scene.launch('BattleScene', { enemyType: enemy });
+            }
+
+            showMessage(text) {
+                const msg = this.add.text(this.player.x, this.player.y - 50, text, {
+                    fontSize: '16px', color: '#fff', backgroundColor: '#000', padding: { x: 15, y: 8 }
+                }).setOrigin(0.5).setDepth(200);
+                this.time.delayedCall(3000, () => msg.destroy());
+            }
+
+            update(time, delta) {
+                if (!this.player) return;
+                const s = 200;
+                this.player.setVelocity(0);
+                if (this.cursors.left.isDown || this.wasd.left.isDown) this.player.setVelocityX(-s);
+                else if (this.cursors.right.isDown || this.wasd.right.isDown) this.player.setVelocityX(s);
+                if (this.cursors.up.isDown || this.wasd.up.isDown) this.player.setVelocityY(-s);
+                else if (this.cursors.down.isDown || this.wasd.down.isDown) this.player.setVelocityY(s);
+                
+                this.playerG.clear();
+                this.playerG.fillStyle(0x00ff00);
+                this.playerG.fillCircle(this.player.x, this.player.y, 15);
+                
+                this.checkCastleZone();
+                this.checkRandomEncounter(delta);
+                this.checkNPCInteraction();
+            }
+        }
+
+        class BattleScene extends Phaser.Scene {
+            constructor() { super({ key: 'BattleScene' }); }
+            init(data) {
+                this.enemyType = data.enemyType;
+                const enemies = {
+                    slime: { name: 'Слизень', sprite: '🟢', hp: 30, exp: 15, gold: 10 },
+                    wolf: { name: 'Волк', sprite: '🐺', hp: 50, exp: 25, gold: 15 },
+                    bat: { name: 'Летучая мышь', sprite: '🦇', hp: 40, exp: 20, gold: 12 }
+                };
+                this.enemy = enemies[this.enemyType];
+                this.enemyHP = this.enemy.hp;
+                this.playerHP = window.gameState.hp;
+            }
+
+            create() {
+                const { width, height } = this.cameras.main;
+                this.add.rectangle(width/2, height/2, width, height, 0x000000);
+                
+                // Враг
+                this.add.text(width/2, 150, this.enemy.sprite, { fontSize: '64px' }).setOrigin(0.5);
+                this.add.text(width/2, 230, this.enemy.name, {
+                    fontSize: '24px', color: '#ff6b6b'
+                }).setOrigin(0.5);
+                
+                // HP врага
+                this.enemyHPText = this.add.text(width/2, 270, `HP: ${this.enemyHP}/${this.enemy.hp}`, {
+                    fontSize: '18px', color: '#ff0000'
+                }).setOrigin(0.5);
+
+                // Зона уворота
+                this.dodgeBox = this.add.rectangle(width/2, height/2 + 50, 400, 300, 0x000000);
+                this.dodgeBox.setStrokeStyle(4, 0xffffff);
+                this.dodgeBox.visible = false;
+
+                // Сердечко игрока
+                this.heart = this.physics.add.sprite(width/2, height/2 + 50, null);
+                this.heart.setSize(20, 20);
+                this.heartG = this.add.graphics();
+                this.heart.visible = false;
+
+                // Кнопки
+                this.createButtons();
+                
+                // Снаряды
+                this.projectiles = [];
+                
+                // Управление
                 this.cursors = this.input.keyboard.createCursorKeys();
                 this.wasd = {
                     up: this.input.keyboard.addKey('W'),
@@ -103,43 +308,203 @@
                 };
             }
 
-            createNPC(x, y, sprite, name, text) {
-                const c = this.add.circle(x, y, 20, 0xffaa00).setInteractive();
-                this.add.text(x, y, sprite, { fontSize: '32px' }).setOrigin(0.5);
-                this.add.text(x, y+35, name, {
-                    fontSize: '12px', color: '#fff', backgroundColor: '#000', padding: { x: 5, y: 2 }
-                }).setOrigin(0.5);
-                c.on('pointerdown', () => {
-                    const msg = this.add.text(640, 600, `${name}: ${text}`, {
-                        fontSize: '18px', color: '#fff', backgroundColor: '#000', padding: { x: 20, y: 10 }
-                    }).setOrigin(0.5);
-                    this.time.delayedCall(3000, () => msg.destroy());
+            createButtons() {
+                const { width, height } = this.cameras.main;
+                const y = height - 100;
+                
+                const attackBtn = this.add.text(width/2 - 150, y, '⚔️ АТАКА', {
+                    fontSize: '20px', color: '#fff', backgroundColor: '#333', padding: { x: 15, y: 8 }
+                }).setInteractive();
+                attackBtn.on('pointerdown', () => this.attack());
+                
+                const fleeBtn = this.add.text(width/2 + 50, y, '🏃 ПОБЕГ', {
+                    fontSize: '20px', color: '#fff', backgroundColor: '#333', padding: { x: 15, y: 8 }
+                }).setInteractive();
+                fleeBtn.on('pointerdown', () => this.flee());
+                
+                this.buttons = [attackBtn, fleeBtn];
+            }
+
+            attack() {
+                const dmg = Phaser.Math.Between(15, 25);
+                this.enemyHP -= dmg;
+                this.enemyHPText.setText(`HP: ${this.enemyHP}/${this.enemy.hp}`);
+                
+                if (this.enemyHP <= 0) {
+                    this.victory();
+                } else {
+                    this.time.delayedCall(500, () => this.enemyTurn());
+                }
+                this.hideButtons();
+            }
+
+            enemyTurn() {
+                this.dodgeBox.visible = true;
+                this.heart.visible = true;
+                this.heart.setPosition(this.dodgeBox.x, this.dodgeBox.y);
+                
+                // Снаряды
+                this.time.addEvent({
+                    delay: 500,
+                    callback: () => this.spawnProjectile(),
+                    repeat: 8
+                });
+                
+                this.time.delayedCall(5000, () => this.endDodge());
+            }
+
+            spawnProjectile() {
+                const x = Phaser.Math.Between(
+                    this.dodgeBox.x - this.dodgeBox.width/2 + 20,
+                    this.dodgeBox.x + this.dodgeBox.width/2 - 20
+                );
+                const y = this.dodgeBox.y - this.dodgeBox.height/2;
+                
+                const proj = this.physics.add.sprite(x, y, null);
+                proj.setVelocityY(200);
+                proj.setSize(15, 15);
+                
+                const projG = this.add.graphics();
+                projG.fillStyle(0xffffff);
+                projG.fillCircle(x, y, 10);
+                
+                this.projectiles.push({ sprite: proj, graphics: projG });
+                
+                this.physics.add.overlap(this.heart, proj, () => {
+                    this.hitPlayer(proj, projG);
                 });
             }
 
+            hitPlayer(proj, projG) {
+                if (!proj.active) return;
+                proj.destroy();
+                projG.destroy();
+                
+                this.playerHP -= 10;
+                window.gameState.hp = this.playerHP;
+                
+                this.cameras.main.shake(100, 0.01);
+                
+                if (this.playerHP <= 0) {
+                    this.gameOver();
+                }
+            }
+
+            endDodge() {
+                this.dodgeBox.visible = false;
+                this.heart.visible = false;
+                this.projectiles.forEach(p => {
+                    p.sprite.destroy();
+                    p.graphics.destroy();
+                });
+                this.projectiles = [];
+                this.showButtons();
+            }
+
+            victory() {
+                window.gameState.exp += this.enemy.exp;
+                window.gameState.gold += this.enemy.gold;
+                
+                // Обновление квеста
+                const quest = window.gameState.activeQuests[0];
+                if (quest && quest.target === this.enemyType) {
+                    quest.count++;
+                    if (quest.count >= quest.required) {
+                        window.gameState.activeQuests = [];
+                        window.gameState.gold += 50;
+                    }
+                }
+                
+                this.add.text(640, 360, `ПОБЕДА!\n+${this.enemy.exp} опыта\n+${this.enemy.gold} золота`, {
+                    fontSize: '24px', color: '#00ff00', align: 'center'
+                }).setOrigin(0.5);
+                
+                this.time.delayedCall(2000, () => {
+                    this.scene.stop();
+                    this.scene.resume('WorldScene');
+                });
+            }
+
+            gameOver() {
+                this.add.text(640, 360, 'ПОРАЖЕНИЕ...', {
+                    fontSize: '32px', color: '#ff0000'
+                }).setOrigin(0.5);
+                this.time.delayedCall(2000, () => {
+                    window.gameState.hp = window.gameState.maxHp;
+                    this.scene.stop();
+                    this.scene.start('MenuScene');
+                });
+            }
+
+            flee() {
+                this.scene.stop();
+                this.scene.resume('WorldScene');
+            }
+
+            hideButtons() {
+                this.buttons.forEach(b => b.setVisible(false));
+            }
+
+            showButtons() {
+                this.buttons.forEach(b => b.setVisible(true));
+            }
+
             update() {
-                if (!this.player) return;
-                const s = 200;
-                this.player.setVelocity(0);
-                if (this.cursors.left.isDown || this.wasd.left.isDown) this.player.setVelocityX(-s);
-                else if (this.cursors.right.isDown || this.wasd.right.isDown) this.player.setVelocityX(s);
-                if (this.cursors.up.isDown || this.wasd.up.isDown) this.player.setVelocityY(-s);
-                else if (this.cursors.down.isDown || this.wasd.down.isDown) this.player.setVelocityY(s);
-                this.playerG.clear();
-                this.playerG.fillStyle(0x00ff00);
-                this.playerG.fillCircle(this.player.x, this.player.y, 15);
+                if (!this.heart.visible) return;
+                
+                const speed = 200;
+                this.heart.setVelocity(0);
+                
+                if (this.cursors.left.isDown || this.wasd.left.isDown) this.heart.setVelocityX(-speed);
+                else if (this.cursors.right.isDown || this.wasd.right.isDown) this.heart.setVelocityX(speed);
+                if (this.cursors.up.isDown || this.wasd.up.isDown) this.heart.setVelocityY(-speed);
+                else if (this.cursors.down.isDown || this.wasd.down.isDown) this.heart.setVelocityY(speed);
+                
+                // Ограничение в зоне
+                const bounds = this.dodgeBox.getBounds();
+                this.heart.x = Phaser.Math.Clamp(this.heart.x, bounds.left + 20, bounds.right - 20);
+                this.heart.y = Phaser.Math.Clamp(this.heart.y, bounds.top + 20, bounds.bottom - 20);
+                
+                // Рисуем сердечко
+                this.heartG.clear();
+                this.heartG.fillStyle(0xff0000);
+                this.heartG.fillCircle(this.heart.x, this.heart.y, 10);
+                
+                // Обновляем снаряды
+                this.projectiles.forEach(p => {
+                    if (p.sprite.active) {
+                        p.graphics.clear();
+                        p.graphics.fillStyle(0xffffff);
+                        p.graphics.fillCircle(p.sprite.x, p.sprite.y, 10);
+                    }
+                });
             }
         }
 
         class UIScene extends Phaser.Scene {
             constructor() { super({ key: 'UIScene' }); }
             create() {
-                this.add.text(20, 20, `HP: ${window.gameState.hp}/${window.gameState.maxHp}`, {
+                this.hpText = this.add.text(20, 20, '', {
                     fontSize: '18px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 5 }
                 });
-                this.add.text(20, 50, `💰 ${window.gameState.gold}`, {
+                this.goldText = this.add.text(20, 50, '', {
                     fontSize: '18px', color: '#ffd700', backgroundColor: '#000', padding: { x: 10, y: 5 }
                 });
+                this.questText = this.add.text(20, 80, '', {
+                    fontSize: '16px', color: '#00ffff', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                });
+            }
+            
+            update() {
+                this.hpText.setText(`HP: ${window.gameState.hp}/${window.gameState.maxHp}`);
+                this.goldText.setText(`💰 ${window.gameState.gold}`);
+                
+                const quest = window.gameState.activeQuests[0];
+                if (quest) {
+                    this.questText.setText(`📜 ${quest.name}: ${quest.count}/${quest.required}`);
+                } else {
+                    this.questText.setText('');
+                }
             }
         }
 
@@ -149,7 +514,7 @@
             height: 720,
             parent: 'game-container',
             backgroundColor: '#1a1a2e',
-            scene: [MenuScene, WorldScene, UIScene],
+            scene: [MenuScene, WorldScene, BattleScene, UIScene],
             physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
             scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
         };

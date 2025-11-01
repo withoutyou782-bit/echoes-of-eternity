@@ -58,8 +58,9 @@
     </div>
     <div id="game-container"></div>
     
-    <!-- Phaser 3 из CDN -->
-    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <!-- Phaser 3 из CDN с резервным вариантом -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js" 
+            onerror="this.onerror=null; this.src='https://cdnjs.cloudflare.com/ajax/libs/phaser/3.70.0/phaser.min.js'"></script>
     
     <script>
         console.log('Starting game initialization...');
@@ -484,39 +485,55 @@
         };
 
         // Запуск игры после загрузки Phaser
-        window.addEventListener('load', () => {
-            console.log('Window loaded, starting game...');
+        function startGame() {
+            console.log('Starting game initialization...');
             
             // Проверка загрузки Phaser
             if (typeof Phaser === 'undefined') {
                 console.error('Phaser not loaded!');
                 document.getElementById('loading').innerHTML = 
-                    '<div style="color: #ff6b6b;">Ошибка: Phaser не загружен</div>';
+                    '<div style="color: #ff6b6b;">❌ Ошибка загрузки</div>' +
+                    '<div style="font-size: 14px; margin-top: 10px;">Проверьте интернет-соединение</div>' +
+                    '<div style="font-size: 12px; margin-top: 10px;"><a href="" style="color: #00ffff;">Перезагрузить</a></div>';
                 return;
             }
 
-            console.log('Phaser loaded, version:', Phaser.VERSION);
+            console.log('Phaser loaded successfully, version:', Phaser.VERSION);
             
             try {
                 const game = new Phaser.Game(config);
-                console.log('Game instance created');
+                console.log('✅ Game instance created successfully');
 
                 // Скрыть экран загрузки
                 setTimeout(() => {
                     const loading = document.getElementById('loading');
                     if (loading) {
+                        console.log('Hiding loading screen...');
                         loading.style.transition = 'opacity 0.5s';
                         loading.style.opacity = '0';
-                        setTimeout(() => loading.remove(), 500);
+                        setTimeout(() => {
+                            loading.remove();
+                            console.log('✅ Game loaded!');
+                        }, 500);
                     }
-                }, 500);
+                }, 1000);
             } catch (error) {
-                console.error('Error creating game:', error);
+                console.error('❌ Error creating game:', error);
                 document.getElementById('loading').innerHTML = 
-                    '<div style="color: #ff6b6b;">Ошибка создания игры</div>' +
-                    '<div style="font-size: 14px; margin-top: 10px;">' + error.message + '</div>';
+                    '<div style="color: #ff6b6b;">❌ Ошибка создания игры</div>' +
+                    '<div style="font-size: 14px; margin-top: 10px; color: #fff;">' + error.message + '</div>' +
+                    '<div style="font-size: 12px; margin-top: 10px;"><a href="" style="color: #00ffff;">Перезагрузить</a></div>';
             }
-        });
+        }
+
+        // Запуск с проверкой загрузки Phaser
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                setTimeout(startGame, 500);
+            });
+        } else {
+            setTimeout(startGame, 500);
+        }
     </script>
 </body>
 </html>

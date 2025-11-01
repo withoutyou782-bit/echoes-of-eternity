@@ -436,128 +436,60 @@ export default class BattleScene extends Phaser.Scene {
     enemyTurn() {
         this.showBattleMessage(`${this.enemyData.name} атакует!`, 1500);
         
-        this.time.delayedCall(1500, () => {
-            this.startBulletHellPhase();
-        });
-    }
-    
-    startBulletHellPhase() {
-        const width = this.cameras.main.width;
-        const height = this.cameras.main.height;
-        
-        // Показываем сердце игрока
-        this.playerHeart.setVisible(true);
-        this.playerHeart.setPosition(width / 2, height / 2 + 100);
-        
-        // Арена для уклонения
-        const arena = this.add.rectangle(width / 2, height / 2 + 100, 400, 200);
-        arena.setStrokeStyle(3, 0xffffff);
-        arena.isFilled = false;
-        
-        // Генерация пуль
-        const bulletCount = 10 + Math.floor(this.enemyData.attack / 5);
-        
-        for (let i = 0; i < bulletCount; i++) {
-            this.time.delayedCall(i * 200, () => {
-                this.createBullet();
-            });
-        }
-        
-        // Управление сердцем
-        const heartSpeed = 200;
-        this.heartMovement = this.time.addEvent({
-            delay: 16,
-            callback: () => {
-                let vx = 0, vy = 0;
-                
-                if (this.cursors.left.isDown) vx = -heartSpeed;
-                if (this.cursors.right.isDown) vx = heartSpeed;
-                if (this.cursors.up.isDown) vy = -heartSpeed;
-                if (this.cursors.down.isDown) vy = heartSpeed;
-                
-                this.playerHeart.body.setVelocity(vx, vy);
-                
-                // Ограничение движения в арене
-                this.playerHeart.x = Phaser.Math.Clamp(this.playerHeart.x, width / 2 - 190, width / 2 + 190);
-                this.playerHeart.y = Phaser.Math.Clamp(this.playerHeart.y, height / 2, height / 2 + 200);
-            },
-            loop: true
-        });
-        
-        // Конец фазы уклонения
-        this.time.delayedCall(3000, () => {
-            this.endBulletHellPhase(arena);
-        });
-    }
-    
-    createBullet() {
-        const width = this.cameras.main.width;
-        const startX = Phaser.Math.Between(width / 2 - 200, width / 2 + 200);
-        const startY = this.cameras.main.height / 2 - 50;
-        
-        const bullet = this.add.circle(startX, startY, 8, 0xff00ff);
-        this.physics.add.existing(bullet);
-        this.bullets.push(bullet);
-        
-        // Движение пули к игроку
-        const angle = Phaser.Math.Angle.Between(startX, startY, 
-            this.playerHeart.x, this.playerHeart.y);
-        
-        bullet.body.setVelocity(
-            Math.cos(angle) * 150,
-            Math.sin(angle) * 150
-        );
-        
-        // Коллизия с игроком
-        this.physics.add.overlap(this.playerHeart, bullet, () => {
-            this.hitPlayer(bullet);
-        });
-    }
-    
-    hitPlayer(bullet) {
-        bullet.destroy();
-        
-        let damage = this.enemyData.attack;
-        if (window.gameState.defendBuff) {
-            damage = Math.floor(damage / 2);
-            window.gameState.defendBuff = false;
-        }
-        
-        window.gameState.hp = Math.max(0, window.gameState.hp - damage);
-        
-        // Обновление HP
+        // Move enemy towards player
         this.tweens.add({
-            targets: this.playerHPBar.bar,
-            width: this.playerHPBar.maxWidth * (window.gameState.hp / window.gameState.maxHp),
-            duration: 300
+            targets: this.enemy,
+            x: this.cameras.main.width / 2 - 50,
+            y: 250,
+            duration: 800,
+            onComplete: () => {
+                // Attack animation
+                this.tweens.add({
+                    targets: this.enemy,
+                    x: this.cameras.main.width / 2 + 50,
+                    duration: 200,
+                    yoyo: true,
+                    onComplete: () => {
+                        // Calculate damage
+                        let damage = this.enemyData.attack;
+                        if (window.gameState.defendBuff) {
+                            damage = Math.floor(damage / 2);
+                            window.gameState.defendBuff = false;
+                        }
+                        
+                        window.gameState.hp = Math.max(0, window.gameState.hp - damage);
+                        
+                        // Update HP bar
+                        this.tweens.add({
+                            targets: this.playerHPBar.bar,
+                            width: this.playerHPBar.maxWidth * (window.gameState.hp / window.gameState.maxHp),
+                            duration: 300
+                        });
+                        
+                        this.showDamageNumber(this.playerHeart.x, this.playerHeart.y, damage);
+                        
+                        // Damage effect
+                        this.cameras.main.flash(100, 255, 0, 0);
+                        
+                        if (window.gameState.hp <= 0) {
+                            this.gameOver();
+                        } else {
+                            // Return enemy to position
+                            this.tweens.add({
+                                targets: this.enemy,
+                                x: this.cameras.main.width / 2,
+                                y: 200,
+                                duration: 500,
+                                onComplete: () => {
+                                    this.playerTurn = true;
+                                    this.actionMenu.setVisible(true);
+                                }
+                            });
+                        }
+                    }
+                });
+            }
         });
-        
-        this.showDamageNumber(this.playerHeart.x, this.playerHeart.y, damage);
-        
-        // Эффект урона
-        this.cameras.main.flash(100, 255, 0, 0);
-        
-        if (window.gameState.hp <= 0) {
-            this.gameOver();
-        }
-    }
-    
-    endBulletHellPhase(arena) {
-        // Очистка
-        this.playerHeart.setVisible(false);
-        this.playerHeart.body.setVelocity(0, 0);
-        arena.destroy();
-        
-        if (this.heartMovement) {
-            this.heartMovement.remove();
-        }
-        
-        this.bullets.forEach(bullet => bullet.destroy());
-        this.bullets = [];
-        
-        // Возврат к меню действий
-        this.playerTurn = true;
-        this.actionMenu.setVisible(true);
     }
     
     showDamageNumber(x, y, damage) {

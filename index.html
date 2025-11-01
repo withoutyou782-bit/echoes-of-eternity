@@ -93,9 +93,36 @@
                         if (confirm('Удалить текущее сохранение?')) {
                             localStorage.removeItem('echoesOfEternity_save');
                             window.gameState = { 
-                                hp: 100, maxHp: 100, gold: 100, level: 1, exp: 0,
-                                activeQuests: [], completedQuests: [], inCastle: false, encounterTimer: 0,
-                                playerX: 500, playerY: 400, defeatedEnemies: [], firstTime: true
+                                // Статы
+                                hp: 100, maxHp: 100, mp: 50, maxMp: 50, gold: 100, level: 1, exp: 0,
+                                attack: 10, defense: 5, speed: 100,
+                                
+                                // Инвентарь
+                                inventory: [],
+                                equippedWeapon: null,
+                                equippedArmor: null,
+                                
+                                // Квесты
+                                activeQuests: [], 
+                                completedQuests: [],
+                                questProgress: {},
+                                
+                                // Прогресс
+                                inCastle: false, 
+                                encounterTimer: 0,
+                                playerX: 500, 
+                                playerY: 400, 
+                                defeatedEnemies: [],
+                                sparedEnemies: [],
+                                discoveredLocations: ['Замок'],
+                                
+                                // Лор и история
+                                storyProgress: 0,
+                                lorePagesFound: [],
+                                npcRelationships: {},
+                                
+                                // Первый запуск
+                                firstTime: true
                             };
                             this.scene.start('WorldScene');
                             this.scene.launch('UIScene');

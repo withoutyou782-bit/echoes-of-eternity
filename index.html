@@ -54,10 +54,44 @@
     <script>
         console.log('🎮 Игра запускается...');
         
-        window.gameState = { 
+        // === СОХРАНЕНИЕ ===
+        function saveGame() {
+            const data = {
+                hp: window.gameState.hp, maxHp: window.gameState.maxHp,
+                gold: window.gameState.gold, level: window.gameState.level,
+                exp: window.gameState.exp, attack: window.gameState.attack,
+                defense: window.gameState.defense,
+                activeQuests: window.gameState.activeQuests,
+                completedQuests: window.gameState.completedQuests,
+                playerX: window.gameState.playerX, playerY: window.gameState.playerY,
+                inventory: window.gameState.inventory,
+                equipped: window.gameState.equipped
+            };
+            localStorage.setItem('echoesOfEternity_save', JSON.stringify(data));
+            console.log('✅ Сохранено!');
+        }
+        
+        function loadGame() {
+            const saved = localStorage.getItem('echoesOfEternity_save');
+            if (saved) {
+                console.log('✅ Загружено!');
+                return JSON.parse(saved);
+            }
+            return null;
+        }
+        
+        const savedData = loadGame();
+        window.gameState = savedData || { 
             hp: 100, maxHp: 100, gold: 100, level: 1, exp: 0,
-            quests: [], activeQuests: [], inCastle: false, encounterTimer: 0
+            attack: 10, defense: 5,
+            activeQuests: [], completedQuests: [],
+            playerX: 500, playerY: 400,
+            inventory: [], equipped: { weapon: null, armor: null },
+            firstTime: true, inCastle: false, encounterTimer: 0
         };
+        
+        // Автосохранение каждые 30 сек
+        setInterval(saveGame, 30000);
 
         class MenuScene extends Phaser.Scene {
             constructor() { super({ key: 'MenuScene' }); }

@@ -296,6 +296,7 @@
             }
             
             startBattle(type, enemyData) {
+                console.log('🎮 АТАКА НА:', type, enemyData);
                 this.scene.pause();
                 this.scene.launch('BattleScene', { enemyType: type, enemyData: enemyData });
             }

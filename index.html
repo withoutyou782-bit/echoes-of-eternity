@@ -68,7 +68,10 @@
                     fontSize: '48px', color: '#00ffff', fontFamily: 'Courier New'
                 }).setOrigin(0.5);
                 
-                const btn = this.add.text(width/2, height/2, '▶ НОВАЯ ИГРА', {
+                const hasSave = localStorage.getItem('echoesOfEternity_save');
+                const btnText = hasSave ? '▶ ПРОДОЛЖИТЬ' : '▶ НОВАЯ ИГРА';
+                
+                const btn = this.add.text(width/2, height/2, btnText, {
                     fontSize: '24px', color: '#fff', backgroundColor: '#16213e', padding: { x: 20, y: 10 }
                 }).setOrigin(0.5).setInteractive();
                 
@@ -78,6 +81,27 @@
                     this.scene.start('WorldScene');
                     this.scene.launch('UIScene');
                 });
+                
+                if (hasSave) {
+                    const newGameBtn = this.add.text(width/2, height/2 + 60, '🆕 НОВАЯ ИГРА', {
+                        fontSize: '20px', color: '#fff', backgroundColor: '#8b0000', padding: { x: 15, y: 8 }
+                    }).setOrigin(0.5).setInteractive();
+                    
+                    newGameBtn.on('pointerover', () => newGameBtn.setBackgroundColor('#a00000'));
+                    newGameBtn.on('pointerout', () => newGameBtn.setBackgroundColor('#8b0000'));
+                    newGameBtn.on('pointerdown', () => {
+                        if (confirm('Удалить текущее сохранение?')) {
+                            localStorage.removeItem('echoesOfEternity_save');
+                            window.gameState = { 
+                                hp: 100, maxHp: 100, gold: 100, level: 1, exp: 0,
+                                activeQuests: [], completedQuests: [], inCastle: false, encounterTimer: 0,
+                                playerX: 500, playerY: 400, defeatedEnemies: [], firstTime: true
+                            };
+                            this.scene.start('WorldScene');
+                            this.scene.launch('UIScene');
+                        }
+                    });
+                }
             }
         }
 
@@ -124,8 +148,51 @@
 
                 // Индикатор локации
                 this.locationText = this.add.text(10, 10, '', {
-                    fontSize: '18px', color: '#fff', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                    fontSize: '18px', color: '#fff', backgroundColor: '#00000088', padding: { x: 10, y: 5 }
                 }).setScrollFactor(0).setDepth(100);
+                
+                // Подсказка взаимодействия
+                this.hintText = this.add.text(640, 650, '', {
+                    fontSize: '16px', color: '#ffff00', backgroundColor: '#00000088', padding: { x: 10, y: 5 }
+                }).setOrigin(0.5).setScrollFactor(0).setDepth(100);
+                
+                // Создаём врагов на карте
+                this.enemies = [];
+                this.spawnEnemies();
+            }
+            
+            spawnEnemies() {
+                // Слизни в лесу
+                for (let i = 0; i < 5; i++) {
+                    this.createEnemy(Phaser.Math.Between(800, 1500), Phaser.Math.Between(600, 1400), '🟢', 'slime');
+                }
+                // Волки
+                for (let i = 0; i < 3; i++) {
+                    this.createEnemy(Phaser.Math.Between(1500, 2500), Phaser.Math.Between(800, 1600), '🐺', 'wolf');
+                }
+                // Летучие мыши
+                for (let i = 0; i < 4; i++) {
+                    this.createEnemy(Phaser.Math.Between(1000, 2000), Phaser.Math.Between(400, 1200), '🦇', 'bat');
+                }
+            }
+            
+            createEnemy(x, y, sprite, type) {
+                const enemy = this.physics.add.sprite(x, y, null);
+                enemy.setSize(30, 30);
+                const enemyG = this.add.graphics();
+                enemyG.fillStyle(0xff0000);
+                enemyG.fillCircle(x, y, 15);
+                
+                const enemyIcon = this.add.text(x, y, sprite, { fontSize: '24px' }).setOrigin(0.5);
+                
+                this.enemies.push({ sprite: enemy, graphics: enemyG, icon: enemyIcon, type, alive: true });
+                
+                // Столкновение с игроком
+                this.physics.add.overlap(this.player, enemy, () => {
+                    if (this.enemies.find(e => e.sprite === enemy && e.alive)) {
+                        this.startBattleWithEnemy(enemy, type);
+                    }
+                });
             }
 
             createCastle(x, y) {
@@ -161,18 +228,32 @@
 
             checkNPCInteraction() {
                 if (!this.npcs) return;
+                let nearestNPC = null;
+                let minDist = 100;
+                
                 this.npcs.forEach(npc => {
                     const dist = Phaser.Math.Distance.Between(
                         this.player.x, this.player.y, npc.x, npc.y
                     );
-                    if (dist < 60 && Phaser.Input.Keyboard.JustDown(this.zKey)) {
-                        if (npc.type === 'quest') {
-                            this.startQuest(npc.name);
-                        } else {
-                            this.showMessage(`${npc.name}: Здравствуй, странник!`);
-                        }
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestNPC = npc;
                     }
                 });
+                
+                if (nearestNPC && minDist < 60) {
+                    this.hintText.setText(`[Z] Поговорить с ${nearestNPC.name}`);
+                    
+                    if (Phaser.Input.Keyboard.JustDown(this.zKey)) {
+                        if (nearestNPC.type === 'quest') {
+                            this.startQuest(nearestNPC.name);
+                        } else {
+                            this.showMessage(`${nearestNPC.name}: Здравствуй, странник!`);
+                        }
+                    }
+                } else {
+                    this.hintText.setText('');
+                }
             }
 
             startQuest(npcName) {
@@ -223,14 +304,61 @@
                 const enemies = ['slime', 'wolf', 'bat'];
                 const enemy = Phaser.Utils.Array.GetRandom(enemies);
                 this.scene.pause();
-                this.scene.launch('BattleScene', { enemyType: enemy });
+                this.scene.launch('BattleScene', { enemyType: enemy, randomEncounter: true });
+            }
+            
+            startBattleWithEnemy(enemySprite, type) {
+                const enemyData = this.enemies.find(e => e.sprite === enemySprite);
+                if (!enemyData || !enemyData.alive) return;
+                
+                enemyData.alive = false;
+                this.currentEnemy = enemyData;
+                
+                this.scene.pause();
+                this.scene.launch('BattleScene', { enemyType: type, enemyData: enemyData });
             }
 
             showMessage(text) {
                 const msg = this.add.text(this.player.x, this.player.y - 50, text, {
-                    fontSize: '16px', color: '#fff', backgroundColor: '#000', padding: { x: 15, y: 8 }
+                    fontSize: '16px', color: '#fff', backgroundColor: '#00000088', padding: { x: 15, y: 8 }
                 }).setOrigin(0.5).setDepth(200);
                 this.time.delayedCall(3000, () => msg.destroy());
+            }
+            
+            showTutorial() {
+                const { width, height } = this.cameras.main;
+                const tutorial = this.add.container(width/2, height/2).setScrollFactor(0).setDepth(1000);
+                
+                const bg = this.add.rectangle(0, 0, 600, 400, 0x000000, 0.95);
+                bg.setStrokeStyle(4, 0x00ffff);
+                
+                const title = this.add.text(0, -150, '🌟 ДОБРО ПОЖАЛОВАТЬ! 🌟', {
+                    fontSize: '24px', color: '#00ffff', fontFamily: 'Courier New'
+                }).setOrigin(0.5);
+                
+                const text = this.add.text(0, -50, 
+                    '🎮 УПРАВЛЕНИЕ:\n' +
+                    'WASD / Стрелки - Движение\n' +
+                    'Z - Разговор с NPC\n\n' +
+                    '🏰 В замке безопасно!\n' +
+                    '🌳 Вне замка нападают враги!\n\n' +
+                    '📜 Берите квесты у Старейшины\n' +
+                    '⚔️ Бейте врагов и уворачивайтесь!\n\n' +
+                    '💾 Игра автоматически сохраняется!',
+                    {
+                        fontSize: '16px', color: '#ffffff', fontFamily: 'Courier New',
+                        align: 'center', lineSpacing: 5
+                    }
+                ).setOrigin(0.5);
+                
+                const btn = this.add.text(0, 150, '[НАЖМИТЕ ЧТОБЫ НАЧАТЬ]', {
+                    fontSize: '18px', color: '#ffff00', fontFamily: 'Courier New'
+                }).setOrigin(0.5).setInteractive();
+                
+                tutorial.add([bg, title, text, btn]);
+                
+                btn.on('pointerdown', () => tutorial.destroy());
+                this.input.keyboard.once('keydown', () => tutorial.destroy());
             }
 
             update(time, delta) {
@@ -246,9 +374,31 @@
                 this.playerG.fillStyle(0x00ff00);
                 this.playerG.fillCircle(this.player.x, this.player.y, 15);
                 
+                // Обновляем врагов
+                if (this.enemies) {
+                    this.enemies.forEach(enemy => {
+                        if (enemy.alive) {
+                            enemy.graphics.clear();
+                            enemy.graphics.fillStyle(0xff0000);
+                            enemy.graphics.fillCircle(enemy.sprite.x, enemy.sprite.y, 15);
+                            enemy.icon.setPosition(enemy.sprite.x, enemy.sprite.y);
+                        } else {
+                            // Удаляем мёртвых врагов
+                            enemy.sprite.destroy();
+                            enemy.graphics.destroy();
+                            enemy.icon.destroy();
+                        }
+                    });
+                    this.enemies = this.enemies.filter(e => e.alive);
+                }
+                
                 this.checkCastleZone();
                 this.checkRandomEncounter(delta);
                 this.checkNPCInteraction();
+                
+                // Сохраняем позицию игрока
+                window.gameState.playerX = this.player.x;
+                window.gameState.playerY = this.player.y;
             }
         }
 
@@ -256,6 +406,8 @@
             constructor() { super({ key: 'BattleScene' }); }
             init(data) {
                 this.enemyType = data.enemyType;
+                this.enemyData = data.enemyData; // Враг с карты
+                this.randomEncounter = data.randomEncounter; // Случайная встреча
                 const enemies = {
                     slime: { name: 'Слизень', sprite: '🟢', hp: 30, exp: 15, gold: 10 },
                     wolf: { name: 'Волк', sprite: '🐺', hp: 50, exp: 25, gold: 15 },
@@ -485,13 +637,13 @@
             constructor() { super({ key: 'UIScene' }); }
             create() {
                 this.hpText = this.add.text(20, 20, '', {
-                    fontSize: '18px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                    fontSize: '18px', color: '#00ff00', backgroundColor: '#00000088', padding: { x: 10, y: 5 }
                 });
                 this.goldText = this.add.text(20, 50, '', {
-                    fontSize: '18px', color: '#ffd700', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                    fontSize: '18px', color: '#ffd700', backgroundColor: '#00000088', padding: { x: 10, y: 5 }
                 });
                 this.questText = this.add.text(20, 80, '', {
-                    fontSize: '16px', color: '#00ffff', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                    fontSize: '16px', color: '#00ffff', backgroundColor: '#00000088', padding: { x: 10, y: 5 }
                 });
             }
             

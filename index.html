@@ -195,38 +195,66 @@
                 this.spawnEnemies();
             }
             
+            createLocations() {
+                const regions = [
+                    { name: 'ЗАМОК', x: 0, y: 0, w: 800, h: 600, color: 0x3a5a4a },
+                    { name: 'ЛЕС', x: 800, y: 0, w: 800, h: 1000, color: 0x2d4a3e },
+                    { name: 'ПУСТЫНЯ', x: 1600, y: 0, w: 700, h: 800, color: 0xc2b280 },
+                    { name: 'ГОРЫ', x: 2300, y: 0, w: 700, h: 1200, color: 0x808080 },
+                    { name: 'БОЛОТО', x: 0, y: 600, w: 1600, h: 1400, color: 0x4a5a3e }
+                ];
+                regions.forEach(r => {
+                    this.add.rectangle(r.x + r.w/2, r.y + r.h/2, r.w, r.h, r.color);
+                    this.add.text(r.x + r.w/2, r.y + 50, r.name, {
+                        fontSize: '32px', color: '#fff', stroke: '#000', strokeThickness: 4
+                    }).setOrigin(0.5);
+                });
+                for (let i = 0; i < 30; i++) this.add.text(Phaser.Math.Between(850, 1550), Phaser.Math.Between(100, 950), '🌲', { fontSize: '48px' });
+                for (let i = 0; i < 15; i++) this.add.text(Phaser.Math.Between(1650, 2250), Phaser.Math.Between(100, 750), '🌵', { fontSize: '40px' });
+                for (let i = 0; i < 20; i++) {
+                    const x = Phaser.Math.Between(2350, 2950), y = Phaser.Math.Between(100, 1150), s = Phaser.Math.Between(30, 60);
+                    this.add.polygon(x, y, [0, -s, s, s/2, -s, s/2], 0x606060);
+                }
+            }
+
             spawnEnemies() {
-                // Слизни в лесу
-                for (let i = 0; i < 5; i++) {
-                    this.createEnemy(Phaser.Math.Between(800, 1500), Phaser.Math.Between(600, 1400), '🟢', 'slime');
-                }
-                // Волки
-                for (let i = 0; i < 3; i++) {
-                    this.createEnemy(Phaser.Math.Between(1500, 2500), Phaser.Math.Between(800, 1600), '🐺', 'wolf');
-                }
-                // Летучие мыши
-                for (let i = 0; i < 4; i++) {
-                    this.createEnemy(Phaser.Math.Between(1000, 2000), Phaser.Math.Between(400, 1200), '🦇', 'bat');
-                }
+                for (let i = 0; i < 5; i++) this.createEnemy(Phaser.Math.Between(850, 1550), Phaser.Math.Between(100, 950), '🟢', 'slime');
+                for (let i = 0; i < 3; i++) this.createEnemy(Phaser.Math.Between(850, 1550), Phaser.Math.Between(100, 950), '🐺', 'wolf');
+                for (let i = 0; i < 4; i++) this.createEnemy(Phaser.Math.Between(1650, 2250), Phaser.Math.Between(100, 750), '🦂', 'scorpion');
+                for (let i = 0; i < 3; i++) this.createEnemy(Phaser.Math.Between(2350, 2950), Phaser.Math.Between(100, 1150), '🗿️', 'golem');
+                this.createEnemy(2600, 600, '🐉', 'dragon');
+                for (let i = 0; i < 5; i++) this.createEnemy(Phaser.Math.Between(50, 1550), Phaser.Math.Between(650, 1950), '🐸', 'frog');
             }
             
             createEnemy(x, y, sprite, type) {
                 const enemy = this.physics.add.sprite(x, y, null);
                 enemy.setSize(30, 30);
+                enemy.setCollideWorldBounds(true);
                 const enemyG = this.add.graphics();
-                enemyG.fillStyle(0xff0000);
-                enemyG.fillCircle(x, y, 15);
-                
                 const enemyIcon = this.add.text(x, y, sprite, { fontSize: '24px' }).setOrigin(0.5);
                 
-                this.enemies.push({ sprite: enemy, graphics: enemyG, icon: enemyIcon, type, alive: true });
-                
-                // Столкновение с игроком
-                this.physics.add.overlap(this.player, enemy, () => {
-                    if (this.enemies.find(e => e.sprite === enemy && e.alive)) {
-                        this.startBattleWithEnemy(enemy, type);
-                    }
+                this.enemies.push({ 
+                    sprite: enemy, graphics: enemyG, icon: enemyIcon, type, alive: true,
+                    speed: Phaser.Math.Between(30, 80), timer: 0, maxTime: Phaser.Math.Between(2000, 5000),
+                    dir: Phaser.Math.Between(0, 360)
                 });
+                
+                this.physics.add.overlap(this.player, enemy, () => {
+                    const e = this.enemies.find(e => e.sprite === enemy && e.alive);
+                    if (e) this.startBattleWithEnemy(enemy, type);
+                });
+            }
+            
+            showTutorial() {
+                const tutorial = this.add.container(640, 360).setScrollFactor(0).setDepth(1000);
+                const bg = this.add.rectangle(0, 0, 600, 400, 0x000000, 0.95);
+                bg.setStrokeStyle(4, 0x00ffff);
+                const title = this.add.text(0, -150, '🌟 ДОБРО ПОЖАЛОВАТЬ! 🌟', { fontSize: '24px', color: '#00ffff' }).setOrigin(0.5);
+                const text = this.add.text(0, -50, 'WASD - Движение\nZ - Разговор\n\n🏰 В замке безопасно\n🌳 Враги ДВИГАЮТСЯ!\n💾 Автосохранение', { fontSize: '16px', color: '#fff', align: 'center' }).setOrigin(0.5);
+                const btn = this.add.text(0, 150, '[НАЖМИТЕ]', { fontSize: '18px', color: '#ff0' }).setOrigin(0.5).setInteractive();
+                tutorial.add([bg, title, text, btn]);
+                btn.on('pointerdown', () => tutorial.destroy());
+                this.input.keyboard.once('keydown', () => tutorial.destroy());
             }
 
             createCastle(x, y) {

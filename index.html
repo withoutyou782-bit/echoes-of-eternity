@@ -290,7 +290,7 @@
                     const e = this.enemies.find(e => e.sprite === enemy && e.alive);
                     if (e && !e.inBattle) {
                         e.inBattle = true;
-                        this.startBattle(type, e);
+                        this.startBattle(e.type, e);
                     }
                 });
             }

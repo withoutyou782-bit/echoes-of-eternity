@@ -46,9 +46,127 @@
 <body>
     <div id="loading" class="pulse">
         <div>🌟 Echoes of Eternity 🌟</div>
-        <div style="font-size: 16px; margin-top: 20px;">Загрузка живого мира...</div>
+        <div style="font-size: 16px; margin-top: 20px;">Загрузка...</div>
     </div>
     <div id="game-container"></div>
-    <script type="module" src="/src/main.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    <script>
+        console.log('🎮 Игра запускается...');
+        
+        window.gameState = { hp: 100, maxHp: 100, gold: 100, level: 1 };
+
+        class MenuScene extends Phaser.Scene {
+            constructor() { super({ key: 'MenuScene' }); }
+            create() {
+                const { width, height } = this.cameras.main;
+                this.add.rectangle(width/2, height/2, width, height, 0x1a1a2e);
+                this.add.text(width/2, height/3, '🌟 ECHOES OF ETERNITY 🌟', {
+                    fontSize: '48px', color: '#00ffff', fontFamily: 'Courier New'
+                }).setOrigin(0.5);
+                
+                const btn = this.add.text(width/2, height/2, '▶ НОВАЯ ИГРА', {
+                    fontSize: '24px', color: '#fff', backgroundColor: '#16213e', padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setInteractive();
+                
+                btn.on('pointerover', () => btn.setBackgroundColor('#0f3460'));
+                btn.on('pointerout', () => btn.setBackgroundColor('#16213e'));
+                btn.on('pointerdown', () => {
+                    this.scene.start('WorldScene');
+                    this.scene.launch('UIScene');
+                });
+            }
+        }
+
+        class WorldScene extends Phaser.Scene {
+            constructor() { super({ key: 'WorldScene' }); }
+            create() {
+                const { width, height } = this.cameras.main;
+                this.add.rectangle(width/2, height/2, width, height, 0x2d4a3e);
+                this.add.text(width/2, 50, '🏰 Город Вечности', {
+                    fontSize: '32px', color: '#00ffff'
+                }).setOrigin(0.5);
+
+                this.player = this.physics.add.sprite(width/2, height/2, null);
+                this.playerG = this.add.graphics();
+                
+                this.createNPC(300, 300, '👤', 'Старейшина', 'Добро пожаловать!');
+                this.createNPC(500, 400, '⚔️', 'Воин', 'Хочешь сражаться?');
+                this.createNPC(700, 300, '🧙', 'Мудрец', 'Я вижу великую силу...');
+
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.wasd = {
+                    up: this.input.keyboard.addKey('W'),
+                    down: this.input.keyboard.addKey('S'),
+                    left: this.input.keyboard.addKey('A'),
+                    right: this.input.keyboard.addKey('D')
+                };
+            }
+
+            createNPC(x, y, sprite, name, text) {
+                const c = this.add.circle(x, y, 20, 0xffaa00).setInteractive();
+                this.add.text(x, y, sprite, { fontSize: '32px' }).setOrigin(0.5);
+                this.add.text(x, y+35, name, {
+                    fontSize: '12px', color: '#fff', backgroundColor: '#000', padding: { x: 5, y: 2 }
+                }).setOrigin(0.5);
+                c.on('pointerdown', () => {
+                    const msg = this.add.text(640, 600, `${name}: ${text}`, {
+                        fontSize: '18px', color: '#fff', backgroundColor: '#000', padding: { x: 20, y: 10 }
+                    }).setOrigin(0.5);
+                    this.time.delayedCall(3000, () => msg.destroy());
+                });
+            }
+
+            update() {
+                if (!this.player) return;
+                const s = 200;
+                this.player.setVelocity(0);
+                if (this.cursors.left.isDown || this.wasd.left.isDown) this.player.setVelocityX(-s);
+                else if (this.cursors.right.isDown || this.wasd.right.isDown) this.player.setVelocityX(s);
+                if (this.cursors.up.isDown || this.wasd.up.isDown) this.player.setVelocityY(-s);
+                else if (this.cursors.down.isDown || this.wasd.down.isDown) this.player.setVelocityY(s);
+                this.playerG.clear();
+                this.playerG.fillStyle(0x00ff00);
+                this.playerG.fillCircle(this.player.x, this.player.y, 15);
+            }
+        }
+
+        class UIScene extends Phaser.Scene {
+            constructor() { super({ key: 'UIScene' }); }
+            create() {
+                this.add.text(20, 20, `HP: ${window.gameState.hp}/${window.gameState.maxHp}`, {
+                    fontSize: '18px', color: '#00ff00', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                });
+                this.add.text(20, 50, `💰 ${window.gameState.gold}`, {
+                    fontSize: '18px', color: '#ffd700', backgroundColor: '#000', padding: { x: 10, y: 5 }
+                });
+            }
+        }
+
+        const config = {
+            type: Phaser.AUTO,
+            width: 1280,
+            height: 720,
+            parent: 'game-container',
+            backgroundColor: '#1a1a2e',
+            scene: [MenuScene, WorldScene, UIScene],
+            physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
+            scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH }
+        };
+
+        window.addEventListener('load', () => {
+            console.log('✅ Phaser загружен');
+            if (typeof Phaser === 'undefined') {
+                document.getElementById('loading').innerHTML = '<div style="color: #ff6b6b;">❌ Ошибка</div>';
+                return;
+            }
+            new Phaser.Game(config);
+            setTimeout(() => {
+                const l = document.getElementById('loading');
+                if (l) { l.style.opacity = '0'; setTimeout(() => l.remove(), 500); }
+            }, 1000);
+            console.log('✅ Игра запущена!');
+        });
+    </script>
 </body>
 </html>

@@ -23,7 +23,8 @@ export default class WorldSystem {
         const creatureTypes = [
             { name: 'Светлячок', color: 0xffff00, behavior: 'fly' },
             { name: 'Лесной дух', color: 0x00ff00, behavior: 'wander' },
-            { name: 'Тень', color: 0x4a0e4e, behavior: 'hide' }
+            { name: 'Тень', color: 0x4a0e4e, behavior: 'hide' },
+            { name: 'Враждебный дух', color: 0xff0000, behavior: 'hostile' }
         ];
         
         for (let i = 0; i < 20; i++) {
@@ -108,6 +109,41 @@ export default class WorldSystem {
                     yoyo: true,
                     repeat: -1,
                     repeatDelay: 3000
+                });
+                break;
+                
+            case 'hostile':
+                // This enemy will chase the player if in range
+                this.scene.time.addEvent({
+                    delay: 100, // Update every 100ms
+                    callback: () => {
+                        if (!this.scene.player) return;
+                        
+                        // Get player position
+                        const playerX = this.scene.player.sprite.x;
+                        const playerY = this.scene.player.sprite.y;
+                        
+                        // Calculate direction to player
+                        const dx = playerX - creature.x;
+                        const dy = playerY - creature.y;
+                        const distance = Math.sqrt(dx*dx + dy*dy);
+                        
+                        // If within 300 pixels, move towards player
+                        if (distance < 300) {
+                            const speed = 100;
+                            const vx = (dx / distance) * speed;
+                            const vy = (dy / distance) * speed;
+                            
+                            creature.sprite.body.setVelocity(vx, vy);
+                        } else {
+                            // Otherwise wander randomly
+                            creature.sprite.body.setVelocity(
+                                Phaser.Math.Between(-50, 50),
+                                Phaser.Math.Between(-50, 50)
+                            );
+                        }
+                    },
+                    loop: true
                 });
                 break;
         }

@@ -139,16 +139,23 @@
                 this.mapWidth = 3000;
                 this.mapHeight = 2000;
                 
-                // Фон - трава
-                this.add.rectangle(this.mapWidth/2, this.mapHeight/2, this.mapWidth, this.mapHeight, 0x2d4a3e);
-
-                // ЗАМОК
+                // ЛОКАЦИИ С ДЕКОРАЦИЯМИ
+                this.createLocations();
                 this.createCastle(400, 300);
                 
-                // Игрок
-                this.player = this.physics.add.sprite(500, 400, null);
+                // Игрок (загружаем позицию)
+                const startX = window.gameState.playerX || 500;
+                const startY = window.gameState.playerY || 400;
+                this.player = this.physics.add.sprite(startX, startY, null);
                 this.player.setCollideWorldBounds(true);
                 this.playerG = this.add.graphics();
+                
+                // Туториал
+                if (window.gameState.firstTime) {
+                    this.showTutorial();
+                    window.gameState.firstTime = false;
+                    saveGame();
+                }
                 
                 // Камера следует за игроком
                 this.cameras.main.setBounds(0, 0, this.mapWidth, this.mapHeight);

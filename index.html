@@ -228,21 +228,42 @@
             
             createEnemy(x, y, sprite, type) {
                 const enemy = this.physics.add.sprite(x, y, null);
-                enemy.setSize(30, 30);
+                enemy.setSize(40, 40);
                 enemy.setCollideWorldBounds(true);
+                
+                // БОЛЬШОЙ КРУГ ЧТОБЫ БЫЛО ВИДНО
                 const enemyG = this.add.graphics();
-                const enemyIcon = this.add.text(x, y, sprite, { fontSize: '24px' }).setOrigin(0.5);
+                const enemyCircle = this.add.circle(x, y, 25, 0xff0000, 0.3);
+                enemyCircle.setStrokeStyle(3, 0xff0000);
+                
+                // БОЛЬШАЯ ИКОНКА
+                const enemyIcon = this.add.text(x, y, sprite, { fontSize: '40px' }).setOrigin(0.5).setDepth(10);
+                
+                // ИМЯ ВРАГА
+                const nameText = this.add.text(x, y + 35, type.toUpperCase(), {
+                    fontSize: '12px', color: '#ff0000', backgroundColor: '#00000088',
+                    padding: { x: 5, y: 2 }, fontStyle: 'bold'
+                }).setOrigin(0.5).setDepth(10);
                 
                 this.enemies.push({ 
-                    sprite: enemy, graphics: enemyG, icon: enemyIcon, type, alive: true,
+                    sprite: enemy, graphics: enemyG, icon: enemyIcon, circle: enemyCircle,
+                    nameText: nameText, type, alive: true, inBattle: false,
                     speed: Phaser.Math.Between(30, 80), timer: 0, maxTime: Phaser.Math.Between(2000, 5000),
                     dir: Phaser.Math.Between(0, 360)
                 });
                 
                 this.physics.add.overlap(this.player, enemy, () => {
                     const e = this.enemies.find(e => e.sprite === enemy && e.alive);
-                    if (e) this.startBattleWithEnemy(enemy, type);
+                    if (e && !e.inBattle) {
+                        e.inBattle = true;
+                        this.startBattle(type, e);
+                    }
                 });
+            }
+            
+            startBattle(type, enemyData) {
+                this.scene.pause();
+                this.scene.launch('BattleScene', { enemyType: type, enemyData: enemyData });
             }
             
             showTutorial() {

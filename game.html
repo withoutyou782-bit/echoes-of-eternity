@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echoes of Eternity - Живой мир RPG</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #game-container {
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 24px;
+            text-align: center;
+            z-index: 1000;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="pulse">
+        <div>🌟 Echoes of Eternity 🌟</div>
+        <div style="font-size: 16px; margin-top: 20px;">Загрузка живого мира...</div>
+    </div>
+    <div id="game-container"></div>
+    
+    <!-- Phaser 3 из CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    
+    <script>
+        // Глобальное состояние игры
+        window.gameState = {
+            playerName: 'Странник',
+            level: 1,
+            hp: 100,
+            maxHp: 100,
+            mp: 50,
+            maxMp: 50,
+            exp: 0,
+            gold: 0,
+            inventory: [],
+            quests: [],
+            reputation: {
+                guardians: 0,
+                rebels: 0,
+                merchants: 0,
+                mystics: 0
+            },
+            flags: {},
+            relationships: {},
+            timeOfDay: 'morning',
+            weather: 'clear',
+            worldState: {
+                npcStates: {},
+                discoveredLocations: [],
+                completedQuests: [],
+                choices: []
+            }
+        };
+
+        // BootScene
+        class BootScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'BootScene' });
+            }
+
+            preload() {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+                
+                const progressBar = this.add.graphics();
+                const progressBox = this.add.graphics();
+                progressBox.fillStyle(0x222222, 0.8);
+                progressBox.fillRect(width / 2 - 160, height / 2 - 30, 320, 50);
+                
+                const loadingText = this.add.text(width / 2, height / 2 - 60, 'Загрузка...', {
+                    fontFamily: 'Arial',
+                    fontSize: '24px',
+                    color: '#ffffff'
+                }).setOrigin(0.5);
+                
+                const percentText = this.add.text(width / 2, height / 2 - 5, '0%', {
+                    fontFamily: 'Arial',
+                    fontSize: '18px',
+                    color: '#ffffff'
+                }).setOrigin(0.5);
+                
+                this.load.on('progress', (value) => {
+                    progressBar.clear();
+                    progressBar.fillStyle(0x00ffff, 1);
+                    progressBar.fillRect(width / 2 - 150, height / 2 - 20, 300 * value, 30);
+                    percentText.setText(parseInt(value * 100) + '%');
+                });
+                
+                this.load.on('complete', () => {
+                    progressBar.destroy();
+                    progressBox.destroy();
+                    loadingText.destroy();
+                    percentText.destroy();
+                });
+                
+                // Загрузка dummy ассетов
+                for (let i = 0; i < 10; i++) {
+                    this.load.image(`dummy${i}`, 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==');
+                }
+            }
+
+            create() {
+                this.scene.start('MenuScene');
+            }
+        }
+
+        // MenuScene
+        class MenuScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'MenuScene' });
+            }
+
+            create() {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                // Фон
+                const bg = this.add.graphics();
+                bg.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x0f3460, 0x0f3460, 1);
+                bg.fillRect(0, 0, width, height);
+
+                // Заголовок
+                this.add.text(width / 2, height / 4, '🌟 ECHOES OF ETERNITY 🌟', {
+                    fontFamily: 'Courier New',
+                    fontSize: '48px',
+                    color: '#00ffff',
+                    stroke: '#000000',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+
+                this.add.text(width / 2, height / 4 + 60, 'Живой мир RPG', {
+                    fontFamily: 'Courier New',
+                    fontSize: '24px',
+                    color: '#ffffff',
+                    style: 'italic'
+                }).setOrigin(0.5);
+
+                // Кнопки меню
+                const buttonY = height / 2 + 50;
+                const buttonSpacing = 70;
+
+                this.createButton(width / 2, buttonY, '▶ НОВАЯ ИГРА', () => {
+                    this.scene.start('WorldScene');
+                    this.scene.launch('UIScene');
+                });
+
+                this.createButton(width / 2, buttonY + buttonSpacing, '📖 ПРОДОЛЖИТЬ', () => {
+                    this.showMessage('Сохранений пока нет');
+                });
+
+                this.createButton(width / 2, buttonY + buttonSpacing * 2, '⚙ НАСТРОЙКИ', () => {
+                    this.showMessage('Настройки в разработке');
+                });
+
+                this.createButton(width / 2, buttonY + buttonSpacing * 3, '❌ ВЫХОД', () => {
+                    this.showMessage('Спасибо за игру!');
+                });
+
+                // Информация внизу
+                this.add.text(width / 2, height - 30, 'v1.0.0 | Создано с Phaser 3', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#666666'
+                }).setOrigin(0.5);
+            }
+
+            createButton(x, y, text, callback) {
+                const button = this.add.text(x, y, text, {
+                    fontFamily: 'Courier New',
+                    fontSize: '24px',
+                    color: '#ffffff',
+                    backgroundColor: '#16213e',
+                    padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setInteractive();
+
+                button.on('pointerover', () => {
+                    button.setStyle({ color: '#00ffff', backgroundColor: '#0f3460' });
+                });
+
+                button.on('pointerout', () => {
+                    button.setStyle({ color: '#ffffff', backgroundColor: '#16213e' });
+                });
+
+                button.on('pointerdown', callback);
+
+                return button;
+            }
+
+            showMessage(text) {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+                
+                const msg = this.add.text(width / 2, height / 2, text, {
+                    fontFamily: 'Courier New',
+                    fontSize: '20px',
+                    color: '#ffffff',
+                    backgroundColor: '#000000',
+                    padding: { x: 30, y: 20 }
+                }).setOrigin(0.5).setDepth(1000);
+
+                this.time.delayedCall(2000, () => msg.destroy());
+            }
+        }
+
+        // WorldScene
+        class WorldScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'WorldScene' });
+            }
+
+            create() {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                // Фон мира
+                const bg = this.add.graphics();
+                bg.fillGradientStyle(0x2d4a3e, 0x2d4a3e, 0x1a2f23, 0x1a2f23, 1);
+                bg.fillRect(0, 0, width, height);
+
+                // Заголовок локации
+                this.add.text(width / 2, 50, '🏰 Город Вечности', {
+                    fontFamily: 'Courier New',
+                    fontSize: '32px',
+                    color: '#00ffff',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                // Описание
+                const description = this.add.text(width / 2, 120, 
+                    'Древний город, окутанный тайнами.\nВы стоите на центральной площади.', {
+                    fontFamily: 'Courier New',
+                    fontSize: '18px',
+                    color: '#ffffff',
+                    align: 'center',
+                    lineSpacing: 10
+                }).setOrigin(0.5);
+
+                // Игрок (простой квадрат)
+                const player = this.add.rectangle(width / 2, height / 2, 40, 40, 0x00ff00);
+                this.add.text(width / 2, height / 2, '🧙', {
+                    fontSize: '32px'
+                }).setOrigin(0.5);
+
+                // NPC
+                this.createNPC(300, 300, '👤 Старейшина', 'Добро пожаловать, странник!');
+                this.createNPC(600, 350, '⚔️ Воин', 'Ищешь приключений?');
+                this.createNPC(900, 320, '🧪 Алхимик', 'У меня есть зелья...');
+
+                // Управление
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.player = player;
+                this.playerSpeed = 200;
+
+                // Инструкции
+                this.add.text(20, height - 80, 
+                    '🎮 Управление:\n← → ↑ ↓ - Движение\nESC - Меню', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ffffff',
+                    backgroundColor: '#00000088',
+                    padding: { x: 10, y: 5 }
+                });
+
+                // ESC для возврата в меню
+                this.input.keyboard.on('keydown-ESC', () => {
+                    this.scene.stop('UIScene');
+                    this.scene.start('MenuScene');
+                });
+            }
+
+            createNPC(x, y, name, dialogue) {
+                const npc = this.add.rectangle(x, y, 40, 40, 0xff6b6b).setInteractive();
+                const npcText = this.add.text(x, y, '👤', {
+                    fontSize: '32px'
+                }).setOrigin(0.5);
+
+                const nameTag = this.add.text(x, y - 40, name, {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ffffff',
+                    backgroundColor: '#000000',
+                    padding: { x: 5, y: 2 }
+                }).setOrigin(0.5);
+
+                npc.on('pointerdown', () => {
+                    this.showDialogue(dialogue);
+                });
+            }
+
+            showDialogue(text) {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                const dialogueBox = this.add.graphics();
+                dialogueBox.fillStyle(0x000000, 0.9);
+                dialogueBox.fillRect(50, height - 150, width - 100, 100);
+                dialogueBox.lineStyle(2, 0x00ffff);
+                dialogueBox.strokeRect(50, height - 150, width - 100, 100);
+
+                const dialogueText = this.add.text(70, height - 130, text, {
+                    fontFamily: 'Courier New',
+                    fontSize: '18px',
+                    color: '#ffffff',
+                    wordWrap: { width: width - 140 }
+                });
+
+                this.time.delayedCall(3000, () => {
+                    dialogueBox.destroy();
+                    dialogueText.destroy();
+                });
+            }
+
+            update() {
+                if (!this.player) return;
+
+                let velocityX = 0;
+                let velocityY = 0;
+
+                if (this.cursors.left.isDown) {
+                    velocityX = -this.playerSpeed;
+                } else if (this.cursors.right.isDown) {
+                    velocityX = this.playerSpeed;
+                }
+
+                if (this.cursors.up.isDown) {
+                    velocityY = -this.playerSpeed;
+                } else if (this.cursors.down.isDown) {
+                    velocityY = this.playerSpeed;
+                }
+
+                // Простое движение
+                this.player.x += velocityX * 0.016;
+                this.player.y += velocityY * 0.016;
+
+                // Ограничение границ
+                this.player.x = Phaser.Math.Clamp(this.player.x, 20, this.cameras.main.width - 20);
+                this.player.y = Phaser.Math.Clamp(this.player.y, 100, this.cameras.main.height - 100);
+            }
+        }
+
+        // UIScene
+        class UIScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'UIScene' });
+            }
+
+            create() {
+                const width = this.cameras.main.width;
+
+                // Панель статуса
+                const panel = this.add.graphics();
+                panel.fillStyle(0x000000, 0.7);
+                panel.fillRect(10, 10, 300, 100);
+                panel.lineStyle(2, 0x00ffff);
+                panel.strokeRect(10, 10, 300, 100);
+
+                // Имя игрока
+                this.add.text(20, 20, window.gameState.playerName, {
+                    fontFamily: 'Courier New',
+                    fontSize: '20px',
+                    color: '#00ffff',
+                    fontStyle: 'bold'
+                });
+
+                // Уровень
+                this.add.text(20, 45, `Уровень: ${window.gameState.level}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '16px',
+                    color: '#ffffff'
+                });
+
+                // HP бар
+                this.add.text(20, 70, '❤️ HP:', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ff6b6b'
+                });
+
+                const hpBar = this.add.graphics();
+                hpBar.fillStyle(0xff0000, 1);
+                hpBar.fillRect(70, 72, 200 * (window.gameState.hp / window.gameState.maxHp), 12);
+                hpBar.lineStyle(1, 0xffffff);
+                hpBar.strokeRect(70, 72, 200, 12);
+
+                this.add.text(280, 70, `${window.gameState.hp}/${window.gameState.maxHp}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '12px',
+                    color: '#ffffff'
+                });
+
+                // MP бар
+                this.add.text(20, 88, '💧 MP:', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#6b9eff'
+                });
+
+                const mpBar = this.add.graphics();
+                mpBar.fillStyle(0x0066ff, 1);
+                mpBar.fillRect(70, 90, 200 * (window.gameState.mp / window.gameState.maxMp), 12);
+                mpBar.lineStyle(1, 0xffffff);
+                mpBar.strokeRect(70, 90, 200, 12);
+
+                this.add.text(280, 88, `${window.gameState.mp}/${window.gameState.maxMp}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '12px',
+                    color: '#ffffff'
+                });
+
+                // Золото
+                this.add.text(width - 150, 20, `💰 ${window.gameState.gold}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '18px',
+                    color: '#ffd700'
+                });
+            }
+        }
+
+        // BattleScene (заглушка)
+        class BattleScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'BattleScene' });
+            }
+
+            create() {
+                this.add.text(640, 360, 'Боевая сцена в разработке', {
+                    fontFamily: 'Courier New',
+                    fontSize: '32px',
+                    color: '#ffffff'
+                }).setOrigin(0.5);
+            }
+        }
+
+        // Конфигурация игры
+        const config = {
+            type: Phaser.AUTO,
+            width: 1280,
+            height: 720,
+            parent: 'game-container',
+            backgroundColor: '#1a1a2e',
+            scene: [BootScene, MenuScene, WorldScene, UIScene, BattleScene],
+            pixelArt: false,
+            antialias: true,
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            }
+        };
+
+        // Запуск игры
+        const game = new Phaser.Game(config);
+
+        // Скрыть экран загрузки
+        game.events.once('ready', () => {
+            setTimeout(() => {
+                const loading = document.getElementById('loading');
+                if (loading) {
+                    loading.style.transition = 'opacity 1s';
+                    loading.style.opacity = '0';
+                    setTimeout(() => loading.remove(), 1000);
+                }
+            }, 1000);
+        });
+    </script>
+</body>
+</html>

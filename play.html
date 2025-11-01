@@ -1,0 +1,522 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Echoes of Eternity - Живой мир RPG</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        #game-container {
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #loading {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #fff;
+            font-size: 24px;
+            text-align: center;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.8);
+            padding: 40px;
+            border-radius: 10px;
+        }
+        
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+    </style>
+</head>
+<body>
+    <div id="loading" class="pulse">
+        <div>🌟 Echoes of Eternity 🌟</div>
+        <div style="font-size: 16px; margin-top: 20px;">Загрузка...</div>
+    </div>
+    <div id="game-container"></div>
+    
+    <!-- Phaser 3 из CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
+    
+    <script>
+        console.log('Starting game initialization...');
+        
+        // Глобальное состояние игры
+        window.gameState = {
+            playerName: 'Странник',
+            level: 1,
+            hp: 100,
+            maxHp: 100,
+            mp: 50,
+            maxMp: 50,
+            exp: 0,
+            gold: 100,
+            inventory: [],
+            quests: [],
+            reputation: {
+                guardians: 0,
+                rebels: 0,
+                merchants: 0,
+                mystics: 0
+            },
+            flags: {},
+            relationships: {},
+            timeOfDay: 'morning',
+            weather: 'clear',
+            worldState: {
+                npcStates: {},
+                discoveredLocations: [],
+                completedQuests: [],
+                choices: []
+            }
+        };
+
+        // MenuScene - Главное меню
+        class MenuScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'MenuScene' });
+            }
+
+            create() {
+                console.log('MenuScene created');
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                // Фон
+                const bg = this.add.graphics();
+                bg.fillGradientStyle(0x1a1a2e, 0x1a1a2e, 0x0f3460, 0x0f3460, 1);
+                bg.fillRect(0, 0, width, height);
+
+                // Заголовок
+                this.add.text(width / 2, height / 4, '🌟 ECHOES OF ETERNITY 🌟', {
+                    fontFamily: 'Courier New',
+                    fontSize: '48px',
+                    color: '#00ffff',
+                    stroke: '#000000',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+
+                this.add.text(width / 2, height / 4 + 60, 'Живой мир RPG', {
+                    fontFamily: 'Courier New',
+                    fontSize: '24px',
+                    color: '#ffffff',
+                    fontStyle: 'italic'
+                }).setOrigin(0.5);
+
+                // Кнопки меню
+                const buttonY = height / 2 + 50;
+                const buttonSpacing = 70;
+
+                this.createButton(width / 2, buttonY, '▶ НОВАЯ ИГРА', () => {
+                    console.log('Starting new game...');
+                    this.scene.start('WorldScene');
+                    this.scene.launch('UIScene');
+                });
+
+                this.createButton(width / 2, buttonY + buttonSpacing, '📖 ПРОДОЛЖИТЬ', () => {
+                    this.showMessage('Сохранений пока нет');
+                });
+
+                this.createButton(width / 2, buttonY + buttonSpacing * 2, '⚙ НАСТРОЙКИ', () => {
+                    this.showMessage('Настройки в разработке');
+                });
+
+                // Информация внизу
+                this.add.text(width / 2, height - 30, 'v1.0.0 | Управление: Стрелки, ESC - меню', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#888888'
+                }).setOrigin(0.5);
+            }
+
+            createButton(x, y, text, callback) {
+                const button = this.add.text(x, y, text, {
+                    fontFamily: 'Courier New',
+                    fontSize: '24px',
+                    color: '#ffffff',
+                    backgroundColor: '#16213e',
+                    padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setInteractive();
+
+                button.on('pointerover', () => {
+                    button.setStyle({ color: '#00ffff', backgroundColor: '#0f3460' });
+                    button.setScale(1.05);
+                });
+
+                button.on('pointerout', () => {
+                    button.setStyle({ color: '#ffffff', backgroundColor: '#16213e' });
+                    button.setScale(1);
+                });
+
+                button.on('pointerdown', callback);
+
+                return button;
+            }
+
+            showMessage(text) {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+                
+                const msg = this.add.text(width / 2, height / 2, text, {
+                    fontFamily: 'Courier New',
+                    fontSize: '20px',
+                    color: '#ffffff',
+                    backgroundColor: '#000000',
+                    padding: { x: 30, y: 20 }
+                }).setOrigin(0.5).setDepth(1000);
+
+                this.time.delayedCall(2000, () => msg.destroy());
+            }
+        }
+
+        // WorldScene - Игровой мир
+        class WorldScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'WorldScene' });
+            }
+
+            create() {
+                console.log('WorldScene created');
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                // Фон мира
+                const bg = this.add.graphics();
+                bg.fillGradientStyle(0x2d4a3e, 0x2d4a3e, 0x1a2f23, 0x1a2f23, 1);
+                bg.fillRect(0, 0, width, height);
+
+                // Земля
+                const ground = this.add.graphics();
+                ground.fillStyle(0x3a5a4a, 1);
+                ground.fillRect(0, height - 150, width, 150);
+
+                // Заголовок локации
+                this.add.text(width / 2, 50, '🏰 Город Вечности', {
+                    fontFamily: 'Courier New',
+                    fontSize: '32px',
+                    color: '#00ffff',
+                    stroke: '#000000',
+                    strokeThickness: 3
+                }).setOrigin(0.5);
+
+                // Описание
+                this.add.text(width / 2, 120, 
+                    'Древний город, окутанный тайнами. Вы стоите на центральной площади.', {
+                    fontFamily: 'Courier New',
+                    fontSize: '16px',
+                    color: '#ffffff',
+                    align: 'center',
+                    backgroundColor: '#00000066',
+                    padding: { x: 10, y: 5 }
+                }).setOrigin(0.5);
+
+                // Игрок
+                this.player = this.add.container(width / 2, height - 200);
+                const playerBody = this.add.circle(0, 0, 20, 0x00ff00);
+                const playerIcon = this.add.text(0, 0, '🧙', {
+                    fontSize: '32px'
+                }).setOrigin(0.5);
+                this.player.add([playerBody, playerIcon]);
+
+                // NPC
+                this.npcs = [];
+                this.createNPC(200, height - 200, '👤', 'Старейшина', 'Добро пожаловать, странник! Наш город полон тайн.');
+                this.createNPC(500, height - 200, '⚔️', 'Воин', 'Ищешь приключений? Я могу научить тебя сражаться!');
+                this.createNPC(800, height - 200, '🧪', 'Алхимик', 'У меня есть зелья... Хочешь купить?');
+                this.createNPC(1000, height - 200, '📚', 'Мудрец', 'Знания - это сила. Что ты хочешь узнать?');
+
+                // Управление
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.playerSpeed = 3;
+
+                // Инструкции
+                this.add.text(20, height - 100, 
+                    '🎮 Управление:\n← → - Движение\nКлик по NPC - Диалог\nESC - Меню', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ffffff',
+                    backgroundColor: '#00000099',
+                    padding: { x: 10, y: 5 }
+                });
+
+                // ESC для возврата в меню
+                this.input.keyboard.on('keydown-ESC', () => {
+                    console.log('Returning to menu...');
+                    this.scene.stop('UIScene');
+                    this.scene.start('MenuScene');
+                });
+
+                this.dialogueBox = null;
+            }
+
+            createNPC(x, y, icon, name, dialogue) {
+                const npc = this.add.container(x, y);
+                
+                const npcBody = this.add.circle(0, 0, 20, 0xff6b6b).setInteractive();
+                const npcIcon = this.add.text(0, 0, icon, {
+                    fontSize: '32px'
+                }).setOrigin(0.5);
+
+                const nameTag = this.add.text(0, -40, name, {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ffffff',
+                    backgroundColor: '#000000',
+                    padding: { x: 5, y: 2 }
+                }).setOrigin(0.5);
+
+                npc.add([npcBody, npcIcon, nameTag]);
+
+                npcBody.on('pointerover', () => {
+                    npcBody.setFillStyle(0xff8888);
+                    npc.setScale(1.1);
+                });
+
+                npcBody.on('pointerout', () => {
+                    npcBody.setFillStyle(0xff6b6b);
+                    npc.setScale(1);
+                });
+
+                npcBody.on('pointerdown', () => {
+                    this.showDialogue(dialogue, name);
+                });
+
+                this.npcs.push(npc);
+            }
+
+            showDialogue(text, speaker) {
+                // Удалить предыдущий диалог
+                if (this.dialogueBox) {
+                    this.dialogueBox.destroy();
+                    this.dialogueText.destroy();
+                    this.speakerText.destroy();
+                }
+
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                this.dialogueBox = this.add.graphics();
+                this.dialogueBox.fillStyle(0x000000, 0.95);
+                this.dialogueBox.fillRect(50, height - 180, width - 100, 120);
+                this.dialogueBox.lineStyle(3, 0x00ffff);
+                this.dialogueBox.strokeRect(50, height - 180, width - 100, 120);
+
+                this.speakerText = this.add.text(70, height - 170, speaker + ':', {
+                    fontFamily: 'Courier New',
+                    fontSize: '18px',
+                    color: '#00ffff',
+                    fontStyle: 'bold'
+                });
+
+                this.dialogueText = this.add.text(70, height - 140, text, {
+                    fontFamily: 'Courier New',
+                    fontSize: '16px',
+                    color: '#ffffff',
+                    wordWrap: { width: width - 140 }
+                });
+
+                // Клик для закрытия
+                this.dialogueBox.setInteractive(
+                    new Phaser.Geom.Rectangle(50, height - 180, width - 100, 120),
+                    Phaser.Geom.Rectangle.Contains
+                );
+
+                this.input.once('pointerdown', () => {
+                    if (this.dialogueBox) {
+                        this.dialogueBox.destroy();
+                        this.dialogueText.destroy();
+                        this.speakerText.destroy();
+                        this.dialogueBox = null;
+                    }
+                });
+
+                // Автоматически закрыть через 5 секунд
+                this.time.delayedCall(5000, () => {
+                    if (this.dialogueBox) {
+                        this.dialogueBox.destroy();
+                        this.dialogueText.destroy();
+                        this.speakerText.destroy();
+                        this.dialogueBox = null;
+                    }
+                });
+            }
+
+            update() {
+                if (!this.player) return;
+
+                let moved = false;
+
+                if (this.cursors.left.isDown) {
+                    this.player.x -= this.playerSpeed;
+                    moved = true;
+                } else if (this.cursors.right.isDown) {
+                    this.player.x += this.playerSpeed;
+                    moved = true;
+                }
+
+                // Ограничение границ
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+                this.player.x = Phaser.Math.Clamp(this.player.x, 40, width - 40);
+            }
+        }
+
+        // UIScene - Интерфейс
+        class UIScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'UIScene' });
+            }
+
+            create() {
+                console.log('UIScene created');
+                const width = this.cameras.main.width;
+
+                // Панель статуса
+                const panel = this.add.graphics();
+                panel.fillStyle(0x000000, 0.8);
+                panel.fillRect(10, 10, 320, 120);
+                panel.lineStyle(2, 0x00ffff);
+                panel.strokeRect(10, 10, 320, 120);
+
+                // Имя игрока
+                this.add.text(20, 20, window.gameState.playerName, {
+                    fontFamily: 'Courier New',
+                    fontSize: '22px',
+                    color: '#00ffff',
+                    fontStyle: 'bold'
+                });
+
+                // Уровень
+                this.add.text(20, 50, `Уровень: ${window.gameState.level}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '16px',
+                    color: '#ffffff'
+                });
+
+                // HP бар
+                this.add.text(20, 75, '❤️ HP:', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ff6b6b'
+                });
+
+                const hpBar = this.add.graphics();
+                const hpPercent = window.gameState.hp / window.gameState.maxHp;
+                hpBar.fillStyle(0xff0000, 1);
+                hpBar.fillRect(75, 77, 200 * hpPercent, 14);
+                hpBar.lineStyle(2, 0xffffff);
+                hpBar.strokeRect(75, 77, 200, 14);
+
+                this.add.text(285, 75, `${window.gameState.hp}/${window.gameState.maxHp}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '12px',
+                    color: '#ffffff'
+                });
+
+                // MP бар
+                this.add.text(20, 98, '💧 MP:', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#6b9eff'
+                });
+
+                const mpBar = this.add.graphics();
+                const mpPercent = window.gameState.mp / window.gameState.maxMp;
+                mpBar.fillStyle(0x0066ff, 1);
+                mpBar.fillRect(75, 100, 200 * mpPercent, 14);
+                mpBar.lineStyle(2, 0xffffff);
+                mpBar.strokeRect(75, 100, 200, 14);
+
+                this.add.text(285, 98, `${window.gameState.mp}/${window.gameState.maxMp}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '12px',
+                    color: '#ffffff'
+                });
+
+                // Золото
+                this.add.text(width - 160, 20, `💰 Золото: ${window.gameState.gold}`, {
+                    fontFamily: 'Courier New',
+                    fontSize: '18px',
+                    color: '#ffd700',
+                    backgroundColor: '#00000099',
+                    padding: { x: 10, y: 5 }
+                });
+            }
+        }
+
+        // Конфигурация игры
+        const config = {
+            type: Phaser.AUTO,
+            width: 1280,
+            height: 720,
+            parent: 'game-container',
+            backgroundColor: '#1a1a2e',
+            scene: [MenuScene, WorldScene, UIScene],
+            pixelArt: false,
+            antialias: true,
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            }
+        };
+
+        // Запуск игры после загрузки Phaser
+        window.addEventListener('load', () => {
+            console.log('Window loaded, starting game...');
+            
+            // Проверка загрузки Phaser
+            if (typeof Phaser === 'undefined') {
+                console.error('Phaser not loaded!');
+                document.getElementById('loading').innerHTML = 
+                    '<div style="color: #ff6b6b;">Ошибка: Phaser не загружен</div>';
+                return;
+            }
+
+            console.log('Phaser loaded, version:', Phaser.VERSION);
+            
+            try {
+                const game = new Phaser.Game(config);
+                console.log('Game instance created');
+
+                // Скрыть экран загрузки
+                setTimeout(() => {
+                    const loading = document.getElementById('loading');
+                    if (loading) {
+                        loading.style.transition = 'opacity 0.5s';
+                        loading.style.opacity = '0';
+                        setTimeout(() => loading.remove(), 500);
+                    }
+                }, 500);
+            } catch (error) {
+                console.error('Error creating game:', error);
+                document.getElementById('loading').innerHTML = 
+                    '<div style="color: #ff6b6b;">Ошибка создания игры</div>' +
+                    '<div style="font-size: 14px; margin-top: 10px;">' + error.message + '</div>';
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "echoes-of-eternity",
+  "version": "1.0.0",
+  "description": "An ambitious RPG with dynamic combat, living world, and meaningful choices",
+  "main": "index.js",
+  "scripts": {
+    "start": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "keywords": ["game", "rpg", "phaser", "interactive"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "phaser": "^3.70.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}

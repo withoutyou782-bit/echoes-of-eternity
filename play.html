@@ -197,6 +197,8 @@
         class WorldScene extends Phaser.Scene {
             constructor() {
                 super({ key: 'WorldScene' });
+                this.encounterTimer = 0;
+                this.encounterChance = 0.02;
             }
 
             create() {
@@ -204,53 +206,493 @@
                 const width = this.cameras.main.width;
                 const height = this.cameras.main.height;
 
+                // Создаём большой мир
+                this.worldWidth = 2000;
+                this.worldHeight = 1500;
+
                 // Фон мира
-                const bg = this.add.graphics();
-                bg.fillGradientStyle(0x2d4a3e, 0x2d4a3e, 0x1a2f23, 0x1a2f23, 1);
-                bg.fillRect(0, 0, width, height);
+                this.bg = this.add.graphics();
+                this.bg.fillGradientStyle(0x2d4a3e, 0x2d4a3e, 0x1a2f23, 0x1a2f23, 1);
+                this.bg.fillRect(0, 0, this.worldWidth, this.worldHeight);
 
-                // Земля
-                const ground = this.add.graphics();
-                ground.fillStyle(0x3a5a4a, 1);
-                ground.fillRect(0, height - 150, width, 150);
+                // Зоны мира
+                this.createZones();
 
-                // Заголовок локации
-                this.add.text(width / 2, 50, '🏰 Город Вечности', {
-                    fontFamily: 'Courier New',
-                    fontSize: '32px',
-                    color: '#00ffff',
-                    stroke: '#000000',
-                    strokeThickness: 3
-                }).setOrigin(0.5);
+                // Игрок с физикой
+                this.player = this.physics.add.sprite(width / 2, height / 2, null);
+                this.player.setCollideWorldBounds(true);
+                this.player.setSize(30, 30);
+                this.player.setDepth(100);
+                
+                // Визуал игрока
+                this.playerGraphics = this.add.graphics();
+                this.updatePlayerGraphics();
 
-                // Описание
-                this.add.text(width / 2, 120, 
-                    'Древний город, окутанный тайнами. Вы стоите на центральной площади.', {
-                    fontFamily: 'Courier New',
-                    fontSize: '16px',
-                    color: '#ffffff',
-                    align: 'center',
-                    backgroundColor: '#00000066',
-                    padding: { x: 10, y: 5 }
-                }).setOrigin(0.5);
+                // Камера следует за игроком
+                this.cameras.main.setBounds(0, 0, this.worldWidth, this.worldHeight);
+                this.cameras.main.startFollow(this.player, true, 0.1, 0.1);
 
-                // Игрок
-                this.player = this.add.container(width / 2, height - 200);
-                const playerBody = this.add.circle(0, 0, 20, 0x00ff00);
-                const playerIcon = this.add.text(0, 0, '🧙', {
-                    fontSize: '32px'
-                }).setOrigin(0.5);
-                this.player.add([playerBody, playerIcon]);
-
-                // NPC
+                // NPC с квестами
                 this.npcs = [];
-                this.createNPC(200, height - 200, '👤', 'Старейшина', 'Добро пожаловать, странник! Наш город полон тайн.');
-                this.createNPC(500, height - 200, '⚔️', 'Воин', 'Ищешь приключений? Я могу научить тебя сражаться!');
-                this.createNPC(800, height - 200, '🧪', 'Алхимик', 'У меня есть зелья... Хочешь купить?');
-                this.createNPC(1000, height - 200, '📚', 'Мудрец', 'Знания - это сила. Что ты хочешь узнать?');
+                this.createNPC(300, 300, '👤', 'Старейшина', [
+                    { text: 'Добро пожаловать, странник!', responses: [
+                        { text: 'Расскажи о городе', next: 1 },
+                        { text: 'Есть ли задания?', quest: 'find_artifact' }
+                    ]},
+                    { text: 'Наш город древний. Здесь много тайн...', responses: [
+                        { text: 'Спасибо', end: true }
+                    ]}
+                ]);
+                
+                this.createNPC(600, 400, '⚔️', 'Воин', [
+                    { text: 'Хочешь научиться сражаться?', responses: [
+                        { text: 'Да, научи меня!', quest: 'training' },
+                        { text: 'Может позже', end: true }
+                    ]}
+                ]);
+                
+                this.createNPC(900, 500, '🧙', 'Мудрец', [
+                    { text: 'Я вижу в тебе великую силу...', responses: [
+                        { text: 'Что ты видишь?', next: 1 },
+                        { text: 'Уйти', end: true }
+                    ]},
+                    { text: 'Тёмные силы пробуждаются. Будь осторожен!', responses: [
+                        { text: 'Я готов', end: true }
+                    ]}
+                ]);
+
+                this.createNPC(400, 700, '👧', 'Девочка', [
+                    { text: 'Ты видел моего кота? Он убежал в лес...', responses: [
+                        { text: 'Я помогу найти его', quest: 'find_cat' },
+                        { text: 'Извини, спешу', end: true }
+                    ]}
+                ]);
 
                 // Управление
                 this.cursors = this.input.keyboard.createCursorKeys();
+                this.wasd = {
+                    up: this.input.keyboard.addKey('W'),
+                    down: this.input.keyboard.addKey('S'),
+                    left: this.input.keyboard.addKey('A'),
+                    right: this.input.keyboard.addKey('D')
+                };
+                this.interactKey = this.input.keyboard.addKey('Z');
+                this.shiftKey = this.input.keyboard.addKey('SHIFT');
+
+                // Индикатор зоны
+                this.zoneText = this.add.text(10, 10, '', {
+                    fontFamily: 'Courier New',
+                    fontSize: '18px',
+                    color: '#ffffff',
+                    backgroundColor: '#000000aa',
+                    padding: { x: 10, y: 5 }
+                }).setScrollFactor(0).setDepth(200);
+
+                // Подсказка
+                this.hintText = this.add.text(width / 2, height - 30, '', {
+                    fontFamily: 'Courier New',
+                    fontSize: '14px',
+                    color: '#ffff00',
+                    backgroundColor: '#000000aa',
+                    padding: { x: 10, y: 5 }
+                }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
+            }
+
+            createZones() {
+                // Создаём разные зоны мира
+                this.zones = [
+                    { name: 'Город', x: 0, y: 0, width: 800, height: 600, color: 0x3a5a4a, enemies: [] },
+                    { name: 'Лес', x: 800, y: 0, width: 600, height: 800, color: 0x2d4a3e, enemies: ['slime', 'wolf', 'spider'] },
+                    { name: 'Пещера', x: 0, y: 600, width: 800, height: 900, color: 0x1a2f23, enemies: ['bat', 'skeleton', 'ghost'] },
+                    { name: 'Тёмный лес', x: 800, y: 800, width: 1200, height: 700, color: 0x0f1f13, enemies: ['demon', 'dragon', 'wraith'] }
+                ];
+
+                // Рисуем зоны
+                this.zones.forEach(zone => {
+                    const graphics = this.add.graphics();
+                    graphics.fillStyle(zone.color, 1);
+                    graphics.fillRect(zone.x, zone.y, zone.width, zone.height);
+                    
+                    // Название зоны
+                    this.add.text(zone.x + zone.width/2, zone.y + 30, zone.name, {
+                        fontSize: '24px',
+                        color: '#ffffff',
+                        fontFamily: 'Courier New',
+                        stroke: '#000000',
+                        strokeThickness: 3
+                    }).setOrigin(0.5);
+                });
+            }
+
+            updatePlayerGraphics() {
+                this.playerGraphics.clear();
+                this.playerGraphics.fillStyle(0x00ff00, 1);
+                this.playerGraphics.fillCircle(this.player.x, this.player.y, 15);
+                this.playerGraphics.lineStyle(2, 0xffffff);
+                this.playerGraphics.strokeCircle(this.player.x, this.player.y, 15);
+            }
+
+            createNPC(x, y, sprite, name, dialogue) {
+                const npc = this.add.container(x, y);
+                const body = this.add.circle(0, 0, 20, 0xffaa00);
+                const icon = this.add.text(0, 0, sprite, { fontSize: '32px' }).setOrigin(0.5);
+                const nameText = this.add.text(0, 35, name, {
+                    fontSize: '12px',
+                    color: '#ffffff',
+                    fontFamily: 'Courier New',
+                    backgroundColor: '#000000aa',
+                    padding: { x: 5, y: 2 }
+                }).setOrigin(0.5);
+                
+                npc.add([body, icon, nameText]);
+                npc.setData('name', name);
+                npc.setData('dialogue', dialogue);
+                npc.setData('sprite', sprite);
+                
+                this.npcs.push(npc);
+            }
+
+            update(time, delta) {
+                if (!this.player) return;
+
+                // Движение игрока
+                const speed = this.shiftKey.isDown ? 300 : 150;
+                this.player.setVelocity(0);
+
+                if (this.cursors.left.isDown || this.wasd.left.isDown) {
+                    this.player.setVelocityX(-speed);
+                } else if (this.cursors.right.isDown || this.wasd.right.isDown) {
+                    this.player.setVelocityX(speed);
+                }
+
+                if (this.cursors.up.isDown || this.wasd.up.isDown) {
+                    this.player.setVelocityY(-speed);
+                } else if (this.cursors.down.isDown || this.wasd.down.isDown) {
+                    this.player.setVelocityY(speed);
+                }
+
+                // Обновляем графику игрока
+                this.updatePlayerGraphics();
+
+                // Проверка зоны
+                this.checkZone();
+
+                // Случайные встречи с врагами
+                if (this.player.body.velocity.length() > 0) {
+                    this.encounterTimer += delta;
+                    if (this.encounterTimer > 1000) {
+                        this.encounterTimer = 0;
+                        this.checkEncounter();
+                    }
+                }
+
+                // Проверка близости к NPC
+                this.checkNPCProximity();
+
+                // Взаимодействие с NPC
+                if (Phaser.Input.Keyboard.JustDown(this.interactKey)) {
+                    this.interactWithNPC();
+                }
+            }
+
+            checkZone() {
+                const currentZone = this.zones.find(zone => 
+                    this.player.x >= zone.x && 
+                    this.player.x <= zone.x + zone.width &&
+                    this.player.y >= zone.y && 
+                    this.player.y <= zone.y + zone.height
+                );
+
+                if (currentZone && currentZone.name !== window.gameState.currentZone) {
+                    window.gameState.currentZone = currentZone.name;
+                    this.zoneText.setText(`📍 ${currentZone.name}`);
+                    this.showMessage(`Вы вошли в: ${currentZone.name}`);
+                }
+            }
+
+            checkEncounter() {
+                const currentZone = this.zones.find(zone => 
+                    this.player.x >= zone.x && 
+                    this.player.x <= zone.x + zone.width &&
+                    this.player.y >= zone.y && 
+                    this.player.y <= zone.y + zone.height
+                );
+
+                if (currentZone && currentZone.enemies.length > 0 && Math.random() < this.encounterChance) {
+                    const enemyType = Phaser.Utils.Array.GetRandom(currentZone.enemies);
+                    this.startBattle(enemyType);
+                }
+            }
+
+            startBattle(enemyType) {
+                const enemies = {
+                    slime: { 
+                        id: 'slime',
+                        name: 'Слизень', 
+                        sprite: '🟢', 
+                        hp: 30, 
+                        maxHp: 30, 
+                        exp: 15, 
+                        gold: 10,
+                        attacks: ['basic', 'wave'],
+                        talkResponses: ['*Булькает*', 'Слизень не понимает вас...']
+                    },
+                    wolf: { 
+                        id: 'wolf',
+                        name: 'Волк', 
+                        sprite: '🐺', 
+                        hp: 50, 
+                        maxHp: 50, 
+                        exp: 25, 
+                        gold: 15,
+                        attacks: ['basic', 'cross'],
+                        talkResponses: ['*Рычит*', 'Волк готов атаковать!']
+                    },
+                    spider: { 
+                        id: 'spider',
+                        name: 'Паук', 
+                        sprite: '🕷️', 
+                        hp: 40, 
+                        maxHp: 40, 
+                        exp: 20, 
+                        gold: 12,
+                        attacks: ['spiral', 'wave'],
+                        rareAttack: 'meteor',
+                        talkResponses: ['*Шипит*', 'Паук плетёт паутину...']
+                    },
+                    bat: { 
+                        id: 'bat',
+                        name: 'Летучая мышь', 
+                        sprite: '🦇', 
+                        hp: 35, 
+                        maxHp: 35, 
+                        exp: 18, 
+                        gold: 8,
+                        attacks: ['spiral', 'cross'],
+                        talkResponses: ['*Пищит*', 'Мышь кружит вокруг вас...']
+                    },
+                    skeleton: { 
+                        id: 'skeleton',
+                        name: 'Скелет', 
+                        sprite: '💀', 
+                        hp: 60, 
+                        maxHp: 60, 
+                        exp: 30, 
+                        gold: 20,
+                        attacks: ['cross', 'wave'],
+                        talkResponses: ['*Костяной стук*', 'Скелет готовится атаковать!']
+                    },
+                    ghost: { 
+                        id: 'ghost',
+                        name: 'Призрак', 
+                        sprite: '👻', 
+                        hp: 45, 
+                        maxHp: 45, 
+                        exp: 22, 
+                        gold: 15,
+                        attacks: ['spiral', 'wave'],
+                        rareAttack: 'meteor',
+                        talkResponses: ['*Жуткий вой*', 'Призрак проходит сквозь стены...']
+                    },
+                    demon: { 
+                        id: 'demon',
+                        name: 'Демон', 
+                        sprite: '😈', 
+                        hp: 80, 
+                        maxHp: 80, 
+                        exp: 50, 
+                        gold: 30,
+                        attacks: ['cross', 'spiral', 'wave'],
+                        rareAttack: 'meteor',
+                        talkResponses: ['Твоя душа моя!', 'Демон смеётся зловеще...']
+                    },
+                    dragon: { 
+                        id: 'dragon',
+                        name: 'Дракон', 
+                        sprite: '🐉', 
+                        hp: 120, 
+                        maxHp: 120, 
+                        exp: 100, 
+                        gold: 50,
+                        attacks: ['meteor', 'cross', 'spiral'],
+                        rareAttack: 'meteor',
+                        talkResponses: ['*Огненное дыхание*', 'Дракон расправляет крылья!']
+                    },
+                    wraith: { 
+                        id: 'wraith',
+                        name: 'Тёмный призрак', 
+                        sprite: '👤', 
+                        hp: 70, 
+                        maxHp: 70, 
+                        exp: 40, 
+                        gold: 25,
+                        attacks: ['spiral', 'cross', 'wave'],
+                        rareAttack: 'meteor',
+                        talkResponses: ['Тьма поглотит тебя...', 'Призрак исчезает и появляется...']
+                    }
+                };
+
+                const enemy = enemies[enemyType];
+                if (enemy) {
+                    this.scene.pause();
+                    this.scene.launch('BattleScene', { enemy });
+                }
+            }
+
+            checkNPCProximity() {
+                let nearestNPC = null;
+                let minDist = 100;
+
+                this.npcs.forEach(npc => {
+                    const dist = Phaser.Math.Distance.Between(
+                        this.player.x, this.player.y,
+                        npc.x, npc.y
+                    );
+
+                    if (dist < minDist) {
+                        minDist = dist;
+                        nearestNPC = npc;
+                    }
+                });
+
+                if (nearestNPC && minDist < 60) {
+                    this.hintText.setText(`[Z] Поговорить с ${nearestNPC.getData('name')}`);
+                    this.nearestNPC = nearestNPC;
+                } else {
+                    this.hintText.setText('');
+                    this.nearestNPC = null;
+                }
+            }
+
+            interactWithNPC() {
+                if (!this.nearestNPC) return;
+
+                const dialogue = this.nearestNPC.getData('dialogue');
+                const name = this.nearestNPC.getData('name');
+                
+                this.startDialogue(name, dialogue, 0);
+            }
+
+            startDialogue(name, dialogueTree, index) {
+                this.scene.pause();
+                
+                const dialogue = dialogueTree[index];
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                // Диалоговое окно
+                const dialogBox = this.add.container(width/2, height - 150);
+                dialogBox.setScrollFactor(0).setDepth(1000);
+
+                const bg = this.add.rectangle(0, 0, width - 100, 200, 0x000000, 0.95);
+                bg.setStrokeStyle(4, 0x00ffff);
+
+                const nameText = this.add.text(-width/2 + 70, -70, name, {
+                    fontSize: '20px',
+                    color: '#00ffff',
+                    fontFamily: 'Courier New',
+                    fontStyle: 'bold'
+                });
+
+                const dialogueText = this.add.text(-width/2 + 70, -40, dialogue.text, {
+                    fontSize: '16px',
+                    color: '#ffffff',
+                    fontFamily: 'Courier New',
+                    wordWrap: { width: width - 200 }
+                });
+
+                dialogBox.add([bg, nameText, dialogueText]);
+
+                // Варианты ответов
+                if (dialogue.responses) {
+                    let yOffset = 20;
+                    dialogue.responses.forEach((response, i) => {
+                        const responseText = this.add.text(
+                            -width/2 + 70,
+                            yOffset,
+                            `[${i+1}] ${response.text}`,
+                            {
+                                fontSize: '14px',
+                                color: '#ffff00',
+                                fontFamily: 'Courier New',
+                                backgroundColor: '#222222',
+                                padding: { x: 10, y: 5 }
+                            }
+                        ).setInteractive();
+
+                        responseText.on('pointerover', () => responseText.setBackgroundColor('#444444'));
+                        responseText.on('pointerout', () => responseText.setBackgroundColor('#222222'));
+                        responseText.on('pointerdown', () => {
+                            dialogBox.destroy();
+                            
+                            if (response.quest) {
+                                this.startQuest(response.quest);
+                            } else if (response.next !== undefined) {
+                                this.startDialogue(name, dialogueTree, response.next);
+                                return;
+                            }
+                            
+                            this.scene.resume();
+                        });
+
+                        dialogBox.add(responseText);
+                        yOffset += 25;
+                    });
+                } else {
+                    const continueText = this.add.text(width/2 - 200, 70, '[Z] Продолжить', {
+                        fontSize: '14px',
+                        color: '#888888',
+                        fontFamily: 'Courier New'
+                    });
+                    dialogBox.add(continueText);
+
+                    this.input.keyboard.once('keydown-Z', () => {
+                        dialogBox.destroy();
+                        this.scene.resume();
+                    });
+                }
+            }
+
+            startQuest(questId) {
+                const quests = {
+                    find_artifact: {
+                        id: 'find_artifact',
+                        name: 'Найти древний артефакт',
+                        description: 'Старейшина попросил найти древний артефакт в руинах'
+                    },
+                    training: {
+                        id: 'training',
+                        name: 'Тренировка с воином',
+                        description: 'Победите 5 врагов чтобы завершить тренировку'
+                    },
+                    find_cat: {
+                        id: 'find_cat',
+                        name: 'Найти кота',
+                        description: 'Девочка потеряла кота в лесу. Помогите найти его!'
+                    }
+                };
+
+                const quest = quests[questId];
+                if (quest && !window.gameState.activeQuests.find(q => q.id === questId)) {
+                    window.gameState.activeQuests.push(quest);
+                    this.showMessage(`📜 Новый квест: ${quest.name}`);
+                }
+            }
+
+            showMessage(text, duration = 2000) {
+                const width = this.cameras.main.width;
+                const height = this.cameras.main.height;
+
+                const msg = this.add.text(width/2, height/2, text, {
+                    fontSize: '20px',
+                    color: '#ffffff',
+                    fontFamily: 'Courier New',
+                    backgroundColor: '#000000dd',
+                    padding: { x: 20, y: 10 }
+                }).setOrigin(0.5).setScrollFactor(0).setDepth(999);
+
+                this.time.delayedCall(duration, () => msg.destroy());
+            }
                 this.playerSpeed = 3;
 
                 // Инструкции

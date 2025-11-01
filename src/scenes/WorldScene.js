@@ -25,6 +25,10 @@ export default class WorldScene extends Phaser.Scene {
         // Система мира
         this.worldSystem = new WorldSystem(this);
         
+        // Add physics for hostile creatures
+        this.physics.add.collider(this.player.sprite, this.worldSystem.hostileGroup);
+        this.physics.add.overlap(this.player.sprite, this.worldSystem.hostileGroup, this.handleHostileEncounter, null, this);
+        
         // Камера следует за игроком
         this.cameras.main.startFollow(this.player.sprite, true, 0.1, 0.1);
         this.cameras.main.setZoom(1);
@@ -404,6 +408,15 @@ export default class WorldScene extends Phaser.Scene {
                 this.startDialogue(npcData);
             }
         }
+    }
+    
+    handleHostileEncounter(playerSprite, enemySprite) {
+        // Get enemy data
+        const enemyData = enemySprite.enemyData;
+        
+        // Start battle with this enemy
+        this.scene.pause();
+        this.scene.launch('BattleScene', { enemy: enemyData });
     }
     
     startDialogue(npcData) {
